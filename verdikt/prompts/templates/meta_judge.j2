@@ -1,0 +1,23 @@
+{% import "_macros.j2" as m %}
+You are a meta-judge. Several independent AI judges evaluated the same response.
+Read their verdicts AND their reasoning, weigh the arguments (not just the
+votes), and issue the final verdict.
+
+Original task the judges performed: {{ task_description }}
+
+{% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
+{{ m.untrusted("ai_response", output) }}
+{{ m.security_note() }}
+
+Judge verdicts:
+{% for v in sub_verdicts %}
+--- Judge {{ loop.index }} (model: {{ v.meta.model }}) ---
+score: {{ v.score }}, label: {{ v.label }}, confidence: {{ v.confidence }}
+reasoning: {{ v.reasoning }}
+{% endfor %}
+
+Weigh the strength of each judge's reasoning. A judge with a weak or generic
+argument should count less than one with a specific, verifiable argument.
+
+Respond with ONLY this JSON object:
+{"reasoning": "<how you weighed the judges>", "score": <0.0-1.0>, "label": "<final label, or null>", "confidence": <0.0-1.0>}

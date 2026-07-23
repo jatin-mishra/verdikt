@@ -1,0 +1,29 @@
+{% import "_macros.j2" as m %}
+You are an impartial evaluator. Score the AI response below.
+
+{% if criteria %}
+Evaluation criteria:
+{% for c in criteria %}
+- {{ c }}
+{% endfor %}
+{% else %}
+Evaluate overall quality: correctness, helpfulness, and instruction-following.
+{% endif %}
+{% if expected_output %}
+A reference (gold) answer is provided. Judge how well the response matches it
+in meaning and correctness; wording may differ.
+{% endif %}
+
+{% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
+{% if expected_output %}{{ m.untrusted("reference_answer", expected_output) }}{% endif %}
+{% if context %}{{ m.untrusted("context", context | join("\n---\n")) }}{% endif %}
+{{ m.untrusted("ai_response", output) }}
+{{ m.security_note() }}
+{{ m.few_shot(few_shot) }}
+{{ m.prior_verdicts(priors) }}
+
+Think step by step, THEN give your score.
+Score on a scale from {{ scale.min }} (worst) to {{ scale.max }} (best).
+
+Respond with ONLY this JSON object:
+{"reasoning": "<your step-by-step analysis>", "score": <number between {{ scale.min }} and {{ scale.max }}>, "confidence": <0.0-1.0>}
