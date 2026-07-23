@@ -14,7 +14,7 @@ from ..core.schemas import ProviderConfig
 # env var conventions per provider prefix
 _ENV_KEYS = {
     "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
+    "anthropic": "ANTHROPIC_AGENT_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "google": "GEMINI_API_KEY",
     "kimi": "MOONSHOT_API_KEY",
@@ -29,7 +29,6 @@ _DEFAULT_BASE_URLS = {
     "kimi": "https://api.moonshot.ai/v1",
     "moonshot": "https://api.moonshot.ai/v1",
 }
-
 
 class ProviderRegistry:
     def __init__(self, providers: Optional[dict[str, ProviderConfig]] = None):
@@ -71,3 +70,4 @@ class ProviderRegistry:
                 # applied to every model of that provider lazily by RetryingClient callers
                 out[provider] = cfg.fallback_models
         return out
+    

@@ -17,10 +17,16 @@ async def main() -> None:
     vd = Verdikt(
         judges=[
             JudgeConfig(
-                name="ab_test",
+                name="helpfulness",
                 type="pointwise",
                 model="gemini/" + os.environ.get("GEMINI_AGENT_MODEL"),
-                # model="anthropic/" + os.environ.get("ANTHROPIC_AGENT_MODEL"),
+                criteria=["Directly answers the question", "No factual errors"],
+                threshold=0.7,
+            ),
+            JudgeConfig(
+                name="judge-2",
+                type="pointwise",
+                model="anthropic/" + os.environ.get("ANTHROPIC_AGENT_MODEL"),
                 criteria=["Directly answers the question", "No factual errors"],
                 threshold=0.7,
             )
@@ -29,16 +35,16 @@ async def main() -> None:
             "gemini" : ProviderConfig(
                 api_key=os.environ.get("GEMINI_API_KEY"),
                 protocol="gemini"
+            ),
+            "anthropic" : ProviderConfig(
+                api_key=os.environ.get("ANTHROPIC_AGENT_API_KEY"),
+                protocol="anthropic"
             )
-            # "anthropic" : ProviderConfig(
-            #     api_key=os.environ.get("ANTHROPIC_AGENT_API_KEY"),
-            #     protocol="anthropic"
-            # )
         }
     )
     print(vd)
     verdict = await vd.evaluate(
-        "ab_test",
+        "helpfulness",
         EvalInput(
             input="What is the capital of France?",
             output="The capital of France is Paris.",
