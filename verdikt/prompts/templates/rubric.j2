@@ -11,6 +11,8 @@ Criteria:
 {{ loop.index }}. {{ c }}
 {% endfor %}
 
+{{ m.system_prompt(system_prompt) }}
+{{ m.conversation(conversation) }}
 {% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
 {% if expected_output %}{{ m.untrusted("reference_answer", expected_output) }}{% endif %}
 {% if context %}{{ m.untrusted("context", context | join("\n---\n")) }}{% endif %}

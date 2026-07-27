@@ -9,6 +9,7 @@ The protocol for a model is inferred from its provider prefix
 ("anthropic/claude-sonnet-4-5" -> anthropic protocol); custom/self-hosted
 endpoints can set ``protocol`` and ``base_url`` in their ProviderConfig.
 """
+from .adapters import ProtocolAdapter, register_protocol
 from .client import FrontierClient
 
-__all__ = ["FrontierClient"]
+__all__ = ["FrontierClient", "ProtocolAdapter", "register_protocol"]

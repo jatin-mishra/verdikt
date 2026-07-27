@@ -53,6 +53,8 @@ class BaseJudge(abc.ABC):
             "output": inp.output,
             "expected_output": inp.expected_output,
             "context": inp.context,
+            "system_prompt": inp.system_prompt,
+            "conversation": inp.conversation,
             "criteria": self.config.criteria,
             "rubric": self.config.rubric,
             "labels": self.config.labels,

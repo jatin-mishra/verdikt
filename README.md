@@ -1,15 +1,55 @@
 # verdikt
 
-Configurable LLM-as-judge library. Plug it into any agent: configure judges (in code or YAML), feed the AI's input/output, get a structured judgement back.
+**Configurable LLM-as-judge library for Python.** Plug it into any agent or
+pipeline: configure judges in code or YAML, feed in the AI's input/output,
+get back a structured, typed `Verdict` — score, label, reasoning, cost, and
+token accounting, every time.
 
-**Features**
+verdikt is built as a **library, not a framework**: it has no server, no
+required event loop of its own, and no assumptions about your agent stack.
+Every extension point — judge types, LLM backends, provider protocols, prompt
+templates — is a small, explicit interface you implement and register, so
+your own components plug in without forking or patching the library. See
+[Extending verdikt](#extending-verdikt) below.
 
-- 9 built-in judge types: `pointwise`, `reference`, `pairwise` (with position-swap), `rubric` (G-Eval style), `classifier`, `rag_faithfulness`, `rag_context_relevance`, `rag_answer_relevance`, `trajectory` (agent runs) — plus custom judges via `@register`.
-- Execution modes per judge: `single` model, `broadcast` to many models (Claude, Gemini, ...) with consensus (`majority_vote`, `average`, `weighted_average`, `unanimous`, `consensus_leader`), or `judge_of_judges` (a meta-judge weighs all verdicts and reasoning).
-- Multi-step pipelines: sequential/parallel steps, early-exit gates (`on_fail: stop`), conditional steps (`run_if`), and automatic `prior_verdicts` passing so later judges see earlier verdicts.
-- Reliability built in: reasoning-before-score prompts, JSON-only outputs, multi-sample voting, retries with backoff, model fallbacks, optional response caching, injection-resistant prompt delimiting, cost/token tracking on every verdict.
-- Every provider call goes through that provider's official SDK (`anthropic`, `google-genai`) — each adapter owns its own SDK request/response types entirely; nothing outside `verdikt/llm/frontier/adapters/` ever sees them.
-- Optional exact request/response console logging (system prompt, messages, params in; text, tokens, cost, latency out) via the `VERDIKT_LOG_LLM_CALLS` flag — see [Debugging LLM calls](#debugging-llm-calls).
+## Contents
+
+- [Features](#features)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Core concepts](#core-concepts)
+- [YAML configuration](#yaml-configuration)
+- [Cookbook — judge types](#cookbook--every-judge-type)
+- [Cookbook — execution modes](#cookbook--every-execution-mode)
+- [Integration cookbook](#integration-cookbook--plugging-verdikt-into-agents)
+- [Extending verdikt](#extending-verdikt)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Debugging LLM calls](#debugging-llm-calls)
+- [Tests](#tests)
+
+## Features
+
+- **9 built-in judge types** — `pointwise`, `reference`, `pairwise` (with
+  position-swap), `rubric` (G-Eval style), `classifier`,
+  `rag_faithfulness`, `rag_context_relevance`, `rag_answer_relevance`,
+  `trajectory` (agent runs) — plus your own custom types.
+- **Execution modes per judge** — `single` model, `broadcast` to many models
+  with consensus (`majority_vote`, `average`, `weighted_average`,
+  `unanimous`, `consensus_leader`), or `judge_of_judges` (a meta-judge weighs
+  every verdict and its reasoning, not just the score).
+- **Multi-step pipelines** — sequential/parallel steps, early-exit gates
+  (`on_fail: stop`), conditional steps (`run_if`), and automatic
+  `prior_verdicts` passing so later judges see earlier verdicts.
+- **Reliability built in** — reasoning-before-score prompts, JSON-only
+  outputs, multi-sample voting, retries with backoff, model fallbacks,
+  optional response caching, injection-resistant prompt delimiting, and
+  cost/token tracking on every verdict.
+- **Official provider SDKs** — every call goes through the provider's own
+  Python SDK (`anthropic`, `google-genai`); each adapter owns its SDK's
+  request/response types entirely, so nothing above it ever has to know.
+- **Exact request/response logging** — see the system prompt, every message,
+  and the exact reply, tokens, cost and latency for every call, gated behind
+  one flag. See [Debugging LLM calls](#debugging-llm-calls).
 
 ## Install
 
@@ -18,20 +58,20 @@ pip install -e .            # includes official provider SDKs (anthropic, google
 pip install -e ".[dev]"     # + pytest
 ```
 
-## Quick start (code only)
+## Quick start
 
 ```python
 import asyncio
 from verdikt import Verdikt, JudgeConfig, EvalInput
 
-v = Verdikt(judges=[
+vd = Verdikt(judges=[
     JudgeConfig(name="helpfulness", type="pointwise",
                 model="anthropic/claude-haiku", threshold=0.7),
 ])
 # API keys come from env vars: ANTHROPIC_AGENT_API_KEY, GEMINI_API_KEY
 
 async def main():
-    verdict = await v.evaluate("helpfulness", EvalInput(
+    verdict = await vd.evaluate("helpfulness", EvalInput(
         input="What is the capital of France?",
         output="Paris is the capital of France.",
     ))
@@ -39,6 +79,18 @@ async def main():
 
 asyncio.run(main())
 ```
+
+A fuller runnable version is at [`examples/quickstart.py`](examples/quickstart.py).
+
+## Core concepts
+
+| Type | What it is |
+|---|---|
+| `EvalInput` | What gets judged: `output` (required), plus optional `input`, `expected_output`, `context`, `conversation`, `trajectory`, `candidates` — each judge type validates the fields it needs. |
+| `Verdict` | What comes back: `score` (0–1), `label`, `passed`, `reasoning`, `criteria_breakdown`, `confidence`, `sub_verdicts` (broadcast members), `error`, and `meta` (model, tokens, cost, latency, disagreement). |
+| `JudgeConfig` | One judge's configuration: `type`, `model`, `criteria`/`labels`/`rubric`, `threshold`, `samples`, and an `execution` block for broadcast/judge-of-judges. |
+| `PipelineConfig` | An ordered/parallel sequence of judges with gating (`on_fail`), conditions (`run_if`), and an aggregation strategy. |
+| `Verdikt` | The facade: builds judges/pipelines from config, owns the `LLMClient`, and exposes `evaluate` / `evaluate_sync` / `evaluate_batch`. |
 
 ## YAML configuration
 
@@ -67,8 +119,8 @@ judges:
     threshold: 0.7
     execution:
       mode: judge_of_judges
-      models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet, gemini/gemini-2.5-pro]
-      meta_judge: anthropic/claude-sonnet
+      models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
+      meta_judge: anthropic/claude-sonnet-4-5
 
 pipelines:
   - name: support_bot_eval
@@ -80,8 +132,8 @@ pipelines:
 ```
 
 ```python
-v = Verdikt.from_yaml("verdikt.yaml")
-result = await v.evaluate("support_bot_eval", EvalInput(input=q, output=a))
+vd = Verdikt.from_yaml("verdikt.yaml")
+result = await vd.evaluate("support_bot_eval", EvalInput(input=q, output=a))
 if not result.passed:
     agent.retry(feedback=result.verdicts[-1].reasoning)
 ```
@@ -90,7 +142,7 @@ Batch evaluation over a dataset (bounded concurrency; per-item failures become
 error verdicts, never exceptions):
 
 ```python
-batch = await v.evaluate_batch("quality_panel", items, concurrency=8)
+batch = await vd.evaluate_batch("quality_panel", items, concurrency=8)
 print(batch.failed_indices)
 ```
 
@@ -139,7 +191,7 @@ v = await vd.evaluate("correctness", EvalInput(
 ```yaml
 - name: ab_test
   type: pairwise
-  model: anthropic/claude-sonnet-4-5
+  model: gemini/gemini-2.5-pro
   criteria: ["More helpful", "More accurate"]
   position_swap: true     # default: runs both orders, disagreement -> tie
 ```
@@ -190,7 +242,7 @@ v.label    # "safe"
 v.passed   # True
 ```
 
-### 6-8. RAG judges — `rag_faithfulness`, `rag_context_relevance`, `rag_answer_relevance`
+### 6–8. RAG judges — `rag_faithfulness`, `rag_context_relevance`, `rag_answer_relevance`
 
 ```yaml
 - name: grounded          # is every claim supported by the context?
@@ -239,18 +291,9 @@ v = await vd.evaluate("agent_run", EvalInput(
 ))
 ```
 
-### 10. Custom judge type
+### 10. Your own judge type
 
-```python
-from verdikt import BaseJudge, register
-from verdikt.core.base import ScoreParsingMixin
-
-@register("tone")
-class ToneJudge(ScoreParsingMixin, BaseJudge):
-    template = "pointwise.j2"                      # reuse a built-in template
-    allowed_consensus = ("average", "majority_vote")  # optional: own compatibility rules
-# then in YAML: {name: tone_check, type: tone, model: anthropic/claude-haiku}
-```
+See [Writing a custom judge](#1-writing-a-custom-judge) below for a full worked example.
 
 ## Cookbook — every execution mode
 
@@ -271,7 +314,7 @@ Execution modes apply to **any** judge type (subject to the compatibility matrix
   type: pointwise
   execution:
     mode: broadcast
-    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
     consensus: average             # default for score judges
 ```
 
@@ -301,7 +344,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   fail_on: [unsafe]
   execution:
     mode: broadcast
-    models: [anthropic/claude-haiku, anthropic/claude-haiku, gemini/gemini-2.5-flash]
+    models: [anthropic/claude-haiku, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-flash]
     # consensus omitted -> majority_vote (the default for classifier/pairwise)
 ```
 
@@ -314,7 +357,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   fail_on: [unsafe]
   execution:
     mode: broadcast
-    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5]
+    models: [anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
     consensus: unanimous          # any split verdict -> passed = false
 ```
 
@@ -341,7 +384,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   threshold: 0.7
   execution:
     mode: judge_of_judges
-    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
     meta_judge: anthropic/claude-sonnet-4-5
 ```
 
@@ -512,19 +555,6 @@ if v.meta.disagreement and v.meta.disagreement > 0.4:
     queue_for_human_review(inp, v.sub_verdicts)  # models can't agree -> human decides
 ```
 
-### 13. Custom backend or on-prem model — swap the client
-
-```python
-from verdikt import LLMClient, LLMResponse
-
-class MyGatewayClient(LLMClient):
-    async def complete(self, model, messages, **kw) -> LLMResponse:
-        text = await my_internal_gateway.chat(model, messages)
-        return LLMResponse(text=text, model=model)
-
-vd = Verdikt.from_config(cfg, client=MyGatewayClient())
-```
-
 ## Judge type × execution mode compatibility
 
 Not every consensus strategy makes sense for every judge type — averaging
@@ -542,24 +572,170 @@ picks a sensible default consensus per judge type when you don't set one:
 Custom judges declare their own compatibility via class attributes:
 `supported_modes`, `allowed_consensus`, `default_consensus`.
 
-## Custom judges
+## Extending verdikt
+
+verdikt is meant to be *embedded* — dropped into your own server, agent
+framework, or eval harness and grown from there. Every piece below is a
+small interface you implement once and register; nothing requires editing
+verdikt's own source.
+
+| Want to... | Implement | Register with |
+|---|---|---|
+| Add a new kind of judge (custom scoring/labeling logic) | `BaseJudge` subclass | `@register("my_type")` |
+| Point at an LLM backend verdikt doesn't wire up (an internal gateway, a local model server, a mocked test double) | `LLMClient` subclass | pass as `client=` |
+| Add a wire protocol / provider SDK verdikt doesn't ship | `ProtocolAdapter` subclass | `register_protocol(...)` |
+| Ship a reusable prompt template with your judge | a `.j2` file | `add_template_dir(...)` |
+
+### 1. Writing a custom judge
+
+A judge is `BaseJudge.parse()` (turn the model's JSON reply into a `Verdict`)
+plus a prompt template. Here's a complete one that flags PII leaked into an
+AI's output — a type not built in:
 
 ```python
-from verdikt import BaseJudge, register
-from verdikt.core.base import ScoreParsingMixin
+# my_judges.py
+from pathlib import Path
+from typing import Any
 
-@register("tone")
-class ToneJudge(ScoreParsingMixin, BaseJudge):
-    template = "pointwise.j2"          # or set config.prompt_template inline
+from verdikt import BaseJudge, EvalInput, Verdict, register, add_template_dir
 
-# now usable in YAML: {name: tone_check, type: tone, model: ...}
+# ship pii_check.j2 next to this file; searched before the built-in templates
+add_template_dir(Path(__file__).parent / "templates")
+
+
+@register("pii_check")
+class PIIJudge(BaseJudge):
+    template = "pii_check.j2"
+    verdict_type = "label"
+
+    # labels can't be averaged: only vote-style consensus makes sense
+    allowed_consensus = ("majority_vote", "unanimous", "consensus_leader")
+    default_consensus = "majority_vote"
+
+    def parse(self, data: dict[str, Any], inp: EvalInput) -> Verdict:
+        leaked = data.get("categories") or []
+        return Verdict(
+            judge_name=self.name,
+            label="unsafe" if leaked else "safe",
+            reasoning=str(data.get("reasoning", "")),
+        )
 ```
 
-Any backend works — implement `LLMClient.complete()` and pass it as `client=` to replace the built-in `FrontierClient`.
+```jinja2
+{# templates/pii_check.j2 #}
+Scan the AI response below for leaked personal data (emails, phone numbers,
+SSNs, card numbers). List every category you find.
 
-## Verdict shape
+AI response:
+{{ output }}
 
-Every judge returns a `Verdict`: `score` (0–1), `label`, `passed`, `reasoning` (always present), `criteria_breakdown`, `confidence`, `sub_verdicts` (broadcast members), `error` (failures never raise mid-pipeline), and `meta` (model(s), tokens, cost, latency, disagreement score, execution mode).
+Respond with ONLY this JSON:
+{"reasoning": "<what you found, if anything>", "categories": ["<category>", ...]}
+```
+
+```python
+import my_judges  # runs @register("pii_check") + add_template_dir on import
+
+vd = Verdikt(judges=[
+    JudgeConfig(name="pii", type="pii_check", model="anthropic/claude-haiku",
+                fail_on=["unsafe"]),
+])
+v = await vd.evaluate("pii", EvalInput(output=agent_reply))
+```
+
+Skip the template file entirely for smaller judges: reuse a built-in
+(`template = "pointwise.j2"`) or override per-config with
+`JudgeConfig(prompt_template="...")` — a raw Jinja2 string, no file needed.
+`ScoreParsingMixin` (`from verdikt.core.base import ScoreParsingMixin`) gives
+you `parse()` for free for `{reasoning, score, confidence}`-shaped replies.
+
+Override `required_fields()` to validate `EvalInput` up front (default:
+`["output"]`), or `template_context()` to add extra variables your template
+needs. The judge type name (`"pii_check"` above) is what your YAML `type:`
+field or `JudgeConfig(type=...)` refers to — same mechanism, code or config.
+
+### 2. Writing a custom LLM client
+
+`LLMClient` is one async method. Point verdikt at an internal gateway, a
+local model server, or anything else that can turn `(model, messages)` into
+text:
+
+```python
+from verdikt import LLMClient, LLMResponse
+
+class MyGatewayClient(LLMClient):
+    async def complete(self, model, messages, **kw) -> LLMResponse:
+        text = await my_internal_gateway.chat(model, messages)
+        return LLMResponse(text=text, model=model)
+
+vd = Verdikt.from_config(cfg, client=MyGatewayClient())
+```
+
+This composes with the built-in reliability wrappers: wrap your client in
+`RetryingClient` (backoff + fallback models) or `CachingClient` (skip
+duplicate calls) exactly like `FrontierClient` does — see
+`verdikt/facade.py::_default_client`.
+
+### 3. Plugging in a new provider protocol
+
+If you'd rather stay on `FrontierClient`'s retry/broadcast/caching plumbing
+but need a provider whose wire protocol verdikt doesn't speak (a different
+SDK, a custom gateway), implement `ProtocolAdapter` — the same interface
+`AnthropicAdapter`/`GeminiAdapter` use internally — and register it:
+
+```python
+from verdikt import ProtocolAdapter, register_protocol, Verdikt, ProviderConfig
+
+class MyProtocolAdapter(ProtocolAdapter):
+    async def complete(self, base_url, api_key, model, messages, temperature,
+                        max_tokens, json_mode, params, *, timeout, transport=None):
+        text = await my_sdk_client(api_key, base_url).chat(model, messages)
+        return text, input_tokens, output_tokens   # your SDK's own types stop here
+
+register_protocol("myproto", MyProtocolAdapter, providers={"myprovider": "https://api.example.com"})
+
+vd = Verdikt(
+    judges=[...],
+    providers={"myprovider": ProviderConfig(api_key="...")},  # model: "myprovider/..."
+)
+```
+
+Only `MyProtocolAdapter` ever sees your SDK's request/response objects —
+`FrontierClient` only sees the `(text, input_tokens, output_tokens)` tuple,
+same contract every built-in adapter follows. Register before constructing
+`Verdikt`/`FrontierClient` (adapters resolve lazily on first use, so
+importing the module that calls `register_protocol` early is enough).
+
+### A note on consensus strategies
+
+Consensus strategies (`average`, `majority_vote`, ...) are intentionally a
+fixed, validated set — see [Judge type × execution mode
+compatibility](#judge-type--execution-mode-compatibility) for why some
+combinations are rejected outright (averaging labels isn't meaningful). For
+a custom aggregation rule, run `broadcast` mode and combine
+`verdict.sub_verdicts` yourself — each member's score, label, and reasoning
+are all there.
+
+## Architecture at a glance
+
+```
+EvalInput ─▶ BaseJudge.parse()+template ─▶ LLMClient.complete() ─▶ raw JSON ─▶ Verdict
+                    │                              │
+             @register("type")            RetryingClient ▸ CachingClient ▸ FrontierClient
+                    │                              │
+              Executor (single /                ProtocolAdapter (per provider SDK)
+              broadcast / judge_of_judges)         │
+                    │                       register_protocol(...)
+            PipelineRunner (multi-step,
+            gating, prior_verdicts)
+```
+
+Every layer only depends on the interface below it, not the implementation:
+`Executor` doesn't know which judge type it's running, `LLMClient` callers
+don't know which provider (or SDK) sits behind it, and `PipelineRunner`
+doesn't know what any individual judge does internally. That's what makes
+each layer independently swappable — write a judge without touching the LLM
+layer, or a backend without touching judges or pipelines.
 
 ## Debugging LLM calls
 
@@ -580,5 +756,9 @@ set_llm_logging(False)   # or True — overrides the env var for this process
 ## Tests
 
 ```bash
-python -m pytest tests -q   # 57 tests, no network or API keys needed
+python -m pytest tests -q   # 59 tests, no network or API keys needed
 ```
+
+## License
+
+MIT — see `pyproject.toml`.

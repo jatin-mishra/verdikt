@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from verdikt import EvalInput, JudgeConfig, Step
+from verdikt import EvalInput, JudgeConfig, Message, Step
 from verdikt.core.registry import available_types, get_judge_class
 from verdikt.execution.modes import Executor
 
@@ -157,6 +157,24 @@ async def test_prior_verdicts_rendered_into_prompt():
     )
     assert "safety" in client.calls[0][1]
     assert "no issues" in client.calls[0][1]
+
+
+async def test_system_prompt_and_conversation_rendered_into_prompt():
+    judge = make("pointwise")
+    client = FakeLLMClient(responses=[score_response(4)])
+    inp = EvalInput(
+        output="Paris.",
+        system_prompt="You are a terse geography assistant.",
+        conversation=[
+            Message(role="user", content="What is the capital of France?"),
+            Message(role="assistant", content="Let me check that."),
+        ],
+    )
+    await judge.evaluate_with_model(inp, client, MODEL)
+    prompt = client.calls[0][1]
+    assert "You are a terse geography assistant." in prompt
+    assert "What is the capital of France?" in prompt
+    assert "Let me check that." in prompt
 
 
 async def test_executor_wraps_errors_as_verdict():

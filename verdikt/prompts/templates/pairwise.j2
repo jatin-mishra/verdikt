@@ -11,6 +11,8 @@ Compare on correctness, helpfulness, and instruction-following.
 {% endif %}
 Do NOT prefer a response because it is longer, or because of its position.
 
+{{ m.system_prompt(system_prompt) }}
+{{ m.conversation(conversation) }}
 {% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
 {% if context %}{{ m.untrusted("context", context | join("\n---\n")) }}{% endif %}
 {{ m.untrusted("response_A", candidate_a) }}

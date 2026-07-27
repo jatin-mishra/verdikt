@@ -25,8 +25,9 @@ from .core.schemas import (
 )
 from .facade import Verdikt
 from .llm.client import LLMClient, LLMResponse
-from .llm.frontier import FrontierClient
+from .llm.frontier import FrontierClient, ProtocolAdapter, register_protocol
 from .pipeline.batch import BatchResult
+from .prompts import add_template_dir
 
 __version__ = "0.1.0"
 
@@ -54,5 +55,8 @@ __all__ = [
     "LLMClient",
     "LLMResponse",
     "FrontierClient",
+    "ProtocolAdapter",
+    "register_protocol",
+    "add_template_dir",
     "BatchResult",
 ]

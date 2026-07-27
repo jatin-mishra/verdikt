@@ -28,7 +28,20 @@ class FrontierClient(LLMClient):
         self.timeout = timeout
         self.transport = transport
         self.log_calls = log_calls
-        self._adapters = {proto: cls() for proto, cls in PROTOCOL_ADAPTER_CLASSES.items()}
+        # built lazily per protocol on first use (not eagerly from
+        # PROTOCOL_ADAPTER_CLASSES) so a register_protocol() call made after
+        # construction, but before that protocol is first used, still works.
+        self._adapters: dict[str, Any] = {}
+
+    def _adapter_for(self, protocol: str):
+        adapter = self._adapters.get(protocol)
+        if adapter is None:
+            adapter_cls = PROTOCOL_ADAPTER_CLASSES.get(protocol)
+            if adapter_cls is None:
+                return None
+            adapter = adapter_cls()
+            self._adapters[protocol] = adapter
+        return adapter
 
     async def aclose(self) -> None:
         for adapter in self._adapters.values():
@@ -62,7 +75,7 @@ class FrontierClient(LLMClient):
                 f"no API key for provider '{provider}': set it in ProviderConfig "
                 f"or the provider's environment variable"
             )
-        adapter = self._adapters.get(protocol)
+        adapter = self._adapter_for(protocol)
         if adapter is None:
             raise ValueError(f"unknown protocol '{protocol}' for model '{model}'")
         params = {**cfg.default_params, **kwargs}

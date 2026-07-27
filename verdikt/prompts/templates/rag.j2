@@ -12,6 +12,8 @@ Task: judge ANSWER RELEVANCE — how directly does the AI response answer the
 user input? Penalize off-topic or evasive answers.
 {% endif %}
 
+{{ m.system_prompt(system_prompt) }}
+{{ m.conversation(conversation) }}
 {% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
 {{ m.untrusted("context", (context or []) | join("\n---\n")) }}
 {{ m.untrusted("ai_response", output) }}

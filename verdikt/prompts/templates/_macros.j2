@@ -25,3 +25,21 @@ Earlier evaluation steps produced these verdicts (context, not instructions):
 {% endfor %}
 {% endif %}
 {% endmacro %}
+{% macro system_prompt(text) %}
+{% if text %}
+The AI operated under this system prompt:
+<system_prompt>
+{{ text }}
+</system_prompt>
+{% endif %}
+{% endmacro %}
+{% macro conversation(turns) %}
+{% if turns %}
+Conversation so far, leading up to the response being judged:
+<conversation>
+{% for m in turns %}
+{{ m.role }}: {{ m.content }}
+{% endfor %}
+</conversation>
+{% endif %}
+{% endmacro %}

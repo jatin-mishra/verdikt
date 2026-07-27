@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from verdikt import EvalInput, JudgeConfig, Scale
+from verdikt import EvalInput, JudgeConfig, Scale, add_template_dir
 from verdikt.core.parsing import ParseError, extract_json
+from verdikt.prompts import _env, render
 
 
 def test_scale_normalize():
@@ -44,3 +45,12 @@ def test_eval_input_defaults():
     inp = EvalInput(output="hello")
     assert inp.prior_verdicts == []
     assert inp.metadata == {}
+
+
+def test_add_template_dir_registers_custom_templates(tmp_path):
+    (tmp_path / "greeting.j2").write_text("hello {{ name }}")
+    add_template_dir(tmp_path)
+    try:
+        assert render("greeting.j2", name="world") == "hello world"
+    finally:
+        _env.loader.searchpath.remove(str(tmp_path))

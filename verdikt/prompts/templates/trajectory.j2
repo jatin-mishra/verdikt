@@ -13,6 +13,8 @@ necessary, (3) was the plan efficient (no loops or redundant steps), (4) is the
 final answer consistent with the observations gathered.
 {% endif %}
 
+{{ m.system_prompt(system_prompt) }}
+{{ m.conversation(conversation) }}
 {% if input %}{{ m.untrusted("task", input) }}{% endif %}
 <trajectory>
 {% for s in trajectory %}

@@ -9,7 +9,7 @@ import pytest
 
 from verdikt import ProviderConfig
 from verdikt.llm import logging as llm_logging
-from verdikt.llm.frontier import FrontierClient
+from verdikt.llm.frontier import FrontierClient, ProtocolAdapter, register_protocol
 from verdikt.llm.providers import ProviderRegistry
 
 MESSAGES = [
@@ -159,3 +159,27 @@ async def test_llm_call_logging_flag(capsys):
         await client2.aclose()
     finally:
         llm_logging.set_llm_logging(None)
+
+
+async def test_register_protocol_plugs_in_a_custom_provider():
+    class FakeAdapter(ProtocolAdapter):
+        async def complete(
+            self, base_url, api_key, model, messages, temperature, max_tokens,
+            json_mode, params, *, timeout, transport=None,
+        ):
+            assert base_url == "https://fake.example.com"
+            assert api_key == "sk-fake"
+            assert model == "echo-1"
+            return f"echo: {messages[-1]['content']}", 3, 2
+
+    register_protocol(
+        "fake",
+        FakeAdapter,
+        providers={"fakeprovider": "https://fake.example.com"},
+    )
+    registry = ProviderRegistry({"fakeprovider": ProviderConfig(api_key="sk-fake")})
+    client = FrontierClient(registry)
+    resp = await client.complete("fakeprovider/echo-1", MESSAGES)
+    assert resp.text == "echo: judge this"
+    assert resp.input_tokens == 3 and resp.output_tokens == 2
+    await client.aclose()
