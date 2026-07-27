@@ -38,6 +38,27 @@ Project root: `/home/claude/verdikt`
 - [x] 18. Added examples/ to source: verdikt.example.yaml (every judge type, execution
       mode, and pipeline; validated by test_example_yaml.py) + quickstart.py. 58 tests.
 
+- [x] 19. REPLACED raw-httpx FrontierClient adapters with official provider
+      SDKs (`anthropic`, `google-genai`), and — per user request — DROPPED
+      every provider except Anthropic and Gemini (OpenAI, Kimi, Mistral,
+      OpenRouter, xAI, DeepSeek, and the generic OpenAI-compatible protocol
+      removed entirely from `ProviderRegistry`, cost table, adapters, tests,
+      README, and the example YAML). Each adapter now owns its provider's SDK
+      request/response types exclusively (`adapters/{anthropic,gemini}.py`);
+      `FrontierClient`/`ProtocolAdapter` only ever see the generic
+      `(text, input_tokens, output_tokens)` tuple. SDK clients are cached per
+      `(base_url, api_key)` on each adapter instance (`ProtocolAdapter.
+      _client_for`), `max_retries=0` on the SDK clients so retries stay
+      centralized in `RetryingClient`, and `httpx.MockTransport` injection
+      (`http_client=` / `HttpOptions(async_client_args={"transport": ...})`)
+      keeps the existing wire-level test style working end-to-end through the
+      real SDKs. Added `verdikt/llm/logging.py`: a feature-flagged
+      (`VERDIKT_LOG_LLM_CALLS`, on by default), colorized console logger of
+      the exact outgoing request (system prompt, messages, params) and exact
+      incoming response (text, tokens, cost, latency), hooked into
+      `FrontierClient.complete()` as the single choke-point every provider
+      call passes through. 57 tests passing.
+
 ## Status: COMPLETE (v0.1.0)
 
 All planned work is done and delivered. If resuming for follow-up work, run

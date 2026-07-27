@@ -4,20 +4,16 @@
 # never put raw keys in this file.
 
 providers:
-  openai:
-    api_key: ${OPENAI_API_KEY}
   anthropic:
-    api_key: ${ANTHROPIC_API_KEY}
+    api_key: ${ANTHROPIC_AGENT_API_KEY}
   gemini:
     api_key: ${GEMINI_API_KEY}
-  kimi:
-    api_key: ${MOONSHOT_API_KEY}
-    base_url: "https://api.moonshot.ai/v1"
-  # custom / self-hosted OpenAI-compatible endpoint (vLLM, Ollama, gateway):
+  # custom / self-hosted endpoint speaking the Anthropic or Gemini wire
+  # protocol (a compatible gateway, proxy, etc.):
   # myhost:
   #   api_key: ${MYHOST_API_KEY}
-  #   base_url: "http://localhost:8000/v1"
-  #   protocol: openai            # openai | anthropic | gemini
+  #   base_url: "http://localhost:8000"
+  #   protocol: anthropic          # anthropic | gemini
 
 cache_path: .verdikt_cache.json   # optional: identical calls are never paid twice
 max_retries: 3
@@ -26,13 +22,22 @@ judges:
   # ---- pointwise: score one output ----------------------------------------
   - name: helpfulness
     type: pointwise
-    model: openai/gpt-4.1-mini
+    model: gemini/${GEMINI_AGENT_MODEL}
     criteria:
       - "Directly answers the question"
       - "No factual errors"
     scale: {min: 1, max: 5}
     threshold: 0.7
     samples: 3                    # multi-sample voting: 3 runs, median wins
+
+  # ---- pointwise: same as above, on Claude instead ------------------------
+  - name: judge-2
+    type: pointwise
+    model: anthropic/${ANTHROPIC_AGENT_MODEL}
+    criteria:
+      - "Directly answers the question"
+      - "No factual errors"
+    threshold: 0.7
 
   # ---- reference: compare against a gold answer ---------------------------
   - name: correctness
@@ -43,7 +48,7 @@ judges:
   # ---- pairwise: A vs B (needs candidates: [a, b] in EvalInput) -----------
   - name: ab_test
     type: pairwise
-    model: openai/gpt-4.1
+    model: gemini/gemini-2.5-pro
     criteria: ["More helpful", "More accurate"]
     position_swap: true           # run both orders; disagreement -> tie
 
@@ -60,21 +65,21 @@ judges:
   # ---- classifier: fixed label set ----------------------------------------
   - name: safety
     type: classifier
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
     labels: [safe, needs_review, unsafe]
     fail_on: [unsafe]
 
   # ---- RAG judges ---------------------------------------------------------
   - name: grounded
     type: rag_faithfulness        # needs context in EvalInput
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
     threshold: 0.8
   - name: ctx_relevance
     type: rag_context_relevance   # needs input + context
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
   - name: ans_relevance
     type: rag_answer_relevance    # needs input
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
 
   # ---- trajectory: judge a full agent run (needs trajectory in EvalInput) -
   - name: agent_run
@@ -89,7 +94,7 @@ judges:
     threshold: 0.7
     execution:
       mode: broadcast
-      models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
       consensus: average          # default for score judges
 
   # ---- execution mode: broadcast + weighted_average -----------------------
@@ -97,11 +102,11 @@ judges:
     type: pointwise
     execution:
       mode: broadcast
-      models: [openai/gpt-4.1, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
       consensus: weighted_average
       weights:
-        openai/gpt-4.1: 3.0
-        kimi/kimi-k3: 1.0
+        anthropic/claude-sonnet-4-5: 3.0
+        gemini/gemini-2.5-pro: 1.0
 
   # ---- execution mode: broadcast + majority_vote (classifier jury) --------
   - name: safety_jury
@@ -110,7 +115,7 @@ judges:
     fail_on: [unsafe]
     execution:
       mode: broadcast
-      models: [openai/gpt-4.1-mini, anthropic/claude-haiku, gemini/gemini-2.5-flash]
+      models: [anthropic/claude-haiku, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-flash]
       # consensus omitted -> majority_vote (default for classifier/pairwise)
 
   # ---- execution mode: broadcast + unanimous (strict gate) ----------------
@@ -120,7 +125,7 @@ judges:
     fail_on: [unsafe]
     execution:
       mode: broadcast
-      models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5]
+      models: [anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
       consensus: unanimous        # any split verdict -> passed = false
 
   # ---- execution mode: broadcast + consensus_leader -----------------------
@@ -128,7 +133,7 @@ judges:
     type: pointwise
     execution:
       mode: broadcast
-      models: [anthropic/claude-sonnet-4-5, openai/gpt-4.1-mini, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
       consensus: consensus_leader
       leader: anthropic/claude-sonnet-4-5
       on_disagreement: accept_leader   # accept_consensus | accept_leader | fail | escalate
@@ -141,7 +146,7 @@ judges:
     threshold: 0.7
     execution:
       mode: judge_of_judges
-      models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
       meta_judge: anthropic/claude-sonnet-4-5
 
 pipelines:

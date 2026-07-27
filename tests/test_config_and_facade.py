@@ -9,27 +9,27 @@ from conftest import FakeLLMClient, label_response, score_response
 
 YAML = """
 providers:
-  openai:
-    api_key: ${TEST_OPENAI_KEY}
-  kimi:
-    api_key: ${TEST_MOONSHOT_KEY}
-    base_url: "https://api.moonshot.ai/v1"
+  anthropic:
+    api_key: ${TEST_ANTHROPIC_KEY}
+  gemini:
+    api_key: ${TEST_GEMINI_KEY}
+    base_url: "https://gemini-proxy.example.com"
 
 judges:
   - name: helpfulness
     type: pointwise
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
     threshold: 0.6
   - name: safety
     type: classifier
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
     labels: [safe, unsafe]
     fail_on: [unsafe]
   - name: panel
     type: pointwise
     execution:
       mode: broadcast
-      models: [openai/gpt-4.1, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
       consensus: average
 
 pipelines:
@@ -44,8 +44,8 @@ pipelines:
 
 @pytest.fixture
 def yaml_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("TEST_OPENAI_KEY", "sk-test-123")
-    monkeypatch.setenv("TEST_MOONSHOT_KEY", "mk-test-456")
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "sk-test-123")
+    monkeypatch.setenv("TEST_GEMINI_KEY", "gk-test-456")
     p = tmp_path / "verdikt.yaml"
     p.write_text(YAML)
     return str(p)
@@ -53,8 +53,8 @@ def yaml_path(tmp_path, monkeypatch):
 
 def test_yaml_env_interpolation(yaml_path):
     cfg = load_config(yaml_path)
-    assert cfg.providers["openai"].api_key == "sk-test-123"
-    assert cfg.providers["kimi"].base_url == "https://api.moonshot.ai/v1"
+    assert cfg.providers["anthropic"].api_key == "sk-test-123"
+    assert cfg.providers["gemini"].base_url == "https://gemini-proxy.example.com"
     assert len(cfg.judges) == 3
     assert cfg.pipelines[0].steps[0].on_fail == "stop"
 
@@ -62,7 +62,7 @@ def test_yaml_env_interpolation(yaml_path):
 def test_unknown_judge_in_pipeline_rejected():
     cfg = parse_config(
         {
-            "judges": [{"name": "a", "type": "pointwise", "model": "openai/x"}],
+            "judges": [{"name": "a", "type": "pointwise", "model": "anthropic/x"}],
             "pipelines": [{"name": "p", "steps": [{"judge": "nope"}]}],
         }
     )
@@ -110,7 +110,7 @@ def test_custom_judge_registration():
 
     assert "my_custom" in available_types()
     v = Verdikt(
-        judges=[JudgeConfig(name="c", type="my_custom", model="openai/x")],
+        judges=[JudgeConfig(name="c", type="my_custom", model="anthropic/x")],
         client=FakeLLMClient(),
     )
     assert "c" in v.executors

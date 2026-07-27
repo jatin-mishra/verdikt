@@ -189,9 +189,9 @@ class ProviderConfig(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     # wire protocol for this provider's API; inferred from the provider name
-    # for known providers (openai, anthropic, gemini, kimi, ...). Set it
-    # explicitly for custom/self-hosted endpoints.
-    protocol: Optional[Literal["openai", "anthropic", "gemini"]] = None
+    # for known providers (anthropic, gemini). Set it explicitly for
+    # custom/self-hosted endpoints speaking one of these protocols.
+    protocol: Optional[Literal["anthropic", "gemini"]] = None
     default_params: dict[str, Any] = Field(default_factory=dict)
     max_concurrency: int = 8
     fallback_models: list[str] = Field(default_factory=list)

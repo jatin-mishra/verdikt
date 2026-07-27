@@ -10,7 +10,7 @@ from verdikt.execution.modes import Executor
 
 from conftest import FakeLLMClient, label_response, score_response, winner_response
 
-MODEL = "openai/gpt-4.1-mini"
+MODEL = "anthropic/claude-haiku"
 
 
 def make(judge_type: str, **kw) -> "tuple":

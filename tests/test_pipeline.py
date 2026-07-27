@@ -9,7 +9,7 @@ from verdikt.pipeline.runner import PipelineRunner, eval_condition
 
 from conftest import FakeLLMClient, label_response, score_response
 
-MODEL = "openai/gpt-4.1-mini"
+MODEL = "anthropic/claude-haiku"
 
 
 def executors(client) -> dict:

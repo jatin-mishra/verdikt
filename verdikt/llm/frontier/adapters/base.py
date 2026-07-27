@@ -1,20 +1,41 @@
-"""Shared adapter interface and HTTP helper for frontier wire protocols."""
+"""Shared adapter interface: each protocol adapter owns one provider's
+official SDK entirely — its request/response shapes never leak past the
+``complete()`` boundary below."""
 from __future__ import annotations
 
 import abc
-from typing import Any
+import inspect
+from typing import Any, Optional
 
 import httpx
 
 
 class ProtocolAdapter(abc.ABC):
-    """One wire protocol (OpenAI/Anthropic/Gemini), shared by every provider
-    that speaks it."""
+    """One wire protocol (Anthropic, Gemini), backed by that provider's
+    official SDK. Caches SDK clients per (base_url, api_key) so repeated
+    calls reuse connections instead of reconnecting every time."""
+
+    def __init__(self) -> None:
+        self._clients: dict[tuple[Any, ...], Any] = {}
+
+    def _client_for(self, key: tuple[Any, ...], factory) -> Any:
+        if key not in self._clients:
+            self._clients[key] = factory()
+        return self._clients[key]
+
+    async def aclose(self) -> None:
+        for client in self._clients.values():
+            close = getattr(client, "aclose", None) or getattr(client, "close", None)
+            if close is None:
+                continue
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+        self._clients.clear()
 
     @abc.abstractmethod
     async def complete(
         self,
-        http: httpx.AsyncClient,
         base_url: str,
         api_key: str,
         model: str,
@@ -23,15 +44,8 @@ class ProtocolAdapter(abc.ABC):
         max_tokens: int,
         json_mode: bool,
         params: dict[str, Any],
+        *,
+        timeout: float,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> tuple[str, int, int]:
         """-> (text, input_tokens, output_tokens)"""
-
-
-async def post_json(
-    http: httpx.AsyncClient, url: str, headers: dict[str, str], payload: dict[str, Any]
-) -> dict:
-    resp = await http.post(url, headers=headers, json=payload)
-    if resp.status_code >= 400:
-        # include status so RetryingClient can spot 429/503 as transient
-        raise RuntimeError(f"HTTP {resp.status_code} from {url}: {resp.text[:500]}")
-    return resp.json()

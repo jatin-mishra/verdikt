@@ -1,11 +1,19 @@
-"""Google Gemini generateContent API wire protocol."""
+"""Google Gemini — backed by the official ``google-genai`` SDK.
+
+Only this module knows about ``genai.Client`` or its request/response types;
+``FrontierClient`` only ever sees the generic ``(text, input_tokens,
+output_tokens)`` tuple from ``complete()``.
+"""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 import httpx
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types
 
-from .base import ProtocolAdapter, post_json
+from .base import ProtocolAdapter
 
 PROTOCOL = "gemini"
 
@@ -16,9 +24,24 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 
 
 class GeminiAdapter(ProtocolAdapter):
+    def _client(
+        self, base_url: str, api_key: str, timeout: float, transport: Optional[httpx.AsyncBaseTransport]
+    ) -> genai.Client:
+        def factory() -> genai.Client:
+            # base_url already carries the API version (".../v1beta"); clear
+            # api_version so the SDK doesn't append its own default on top.
+            http_options = types.HttpOptions(
+                base_url=base_url,
+                api_version="",
+                timeout=int(timeout * 1000),
+                async_client_args={"transport": transport} if transport is not None else None,
+            )
+            return genai.Client(api_key=api_key, http_options=http_options)
+
+        return self._client_for((base_url, api_key), factory)
+
     async def complete(
         self,
-        http: httpx.AsyncClient,
         base_url: str,
         api_key: str,
         model: str,
@@ -27,35 +50,29 @@ class GeminiAdapter(ProtocolAdapter):
         max_tokens: int,
         json_mode: bool,
         params: dict[str, Any],
+        *,
+        timeout: float,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> tuple[str, int, int]:
         system_parts = [m["content"] for m in messages if m["role"] == "system"]
         contents = [
-            {"role": "model" if m["role"] == "assistant" else "user",
-             "parts": [{"text": m["content"]}]}
+            {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
             for m in messages
             if m["role"] != "system"
         ]
-        generation_config: dict[str, Any] = {
-            "temperature": temperature,
-            "maxOutputTokens": max_tokens,
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction="\n\n".join(system_parts) if system_parts else None,
+            response_mime_type="application/json" if json_mode else None,
             **params,
-        }
-        if json_mode:
-            generation_config["responseMimeType"] = "application/json"
-        payload: dict[str, Any] = {"contents": contents, "generationConfig": generation_config}
-        if system_parts:
-            payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_parts)}]}
-        data = await post_json(
-            http,
-            f"{base_url}/models/{model}:generateContent",
-            {"x-goog-api-key": api_key},
-            payload,
         )
-        candidates = data.get("candidates", [])
-        text = ""
-        if candidates:
-            text = "".join(
-                p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])
-            )
-        usage = data.get("usageMetadata", {})
-        return text, usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0)
+        client = self._client(base_url, api_key, timeout, transport)
+        try:
+            resp = await client.aio.models.generate_content(model=model, contents=contents, config=config)
+        except genai_errors.APIError as exc:
+            raise RuntimeError(str(exc)) from exc
+        usage = resp.usage_metadata
+        input_tokens = (usage.prompt_token_count if usage else None) or 0
+        output_tokens = (usage.candidates_token_count if usage else None) or 0
+        return resp.text or "", input_tokens, output_tokens

@@ -18,7 +18,7 @@ def test_scale_normalize():
 def test_judge_config_requires_model_for_single():
     with pytest.raises(ValueError, match="model"):
         JudgeConfig(name="j", type="pointwise")
-    JudgeConfig(name="j", type="pointwise", model="openai/gpt-4.1-mini")
+    JudgeConfig(name="j", type="pointwise", model="anthropic/claude-haiku")
 
 
 def test_judge_config_broadcast_needs_models():
@@ -27,7 +27,7 @@ def test_judge_config_broadcast_needs_models():
     JudgeConfig(
         name="j",
         type="pointwise",
-        execution={"mode": "broadcast", "models": ["openai/gpt-4.1", "kimi/kimi-k3"]},
+        execution={"mode": "broadcast", "models": ["anthropic/claude-sonnet-4-5", "gemini/gemini-2.5-pro"]},
     )
 
 

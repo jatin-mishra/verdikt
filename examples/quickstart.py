@@ -1,6 +1,7 @@
 """Minimal end-to-end example.
 
-    export OPENAI_API_KEY=sk-...
+    export GEMINI_API_KEY=... GEMINI_AGENT_MODEL=gemini-2.5-flash
+    export ANTHROPIC_AGENT_API_KEY=... ANTHROPIC_AGENT_MODEL=claude-haiku
     python examples/quickstart.py
 """
 import asyncio
@@ -14,34 +15,35 @@ from verdikt.core.schemas import ProviderConfig
 # ANTHROPIC_AGENT_API_KEY, ANTHROPIC_AGENT_MODEL
 
 async def main() -> None:
-    vd = Verdikt(
-        judges=[
-            JudgeConfig(
-                name="helpfulness",
-                type="pointwise",
-                model="gemini/" + os.environ.get("GEMINI_AGENT_MODEL"),
-                criteria=["Directly answers the question", "No factual errors"],
-                threshold=0.7,
-            ),
-            JudgeConfig(
-                name="judge-2",
-                type="pointwise",
-                model="anthropic/" + os.environ.get("ANTHROPIC_AGENT_MODEL"),
-                criteria=["Directly answers the question", "No factual errors"],
-                threshold=0.7,
-            )
-        ],
-        providers={
-            "gemini" : ProviderConfig(
-                api_key=os.environ.get("GEMINI_API_KEY"),
-                protocol="gemini"
-            ),
-            "anthropic" : ProviderConfig(
-                api_key=os.environ.get("ANTHROPIC_AGENT_API_KEY"),
-                protocol="anthropic"
-            )
-        }
-    )
+    vd = Verdikt.from_yaml("/Users/jatinmishra/Downloads/verdikt/examples/verdikt.example.yaml")
+    # vd = Verdikt(
+    #     judges=[
+    #         JudgeConfig(
+    #             name="helpfulness",
+    #             type="pointwise",
+    #             model="gemini/" + os.environ.get("GEMINI_AGENT_MODEL"),
+    #             criteria=["Directly answers the question", "No factual errors"],
+    #             threshold=0.7,
+    #         ),
+    #         JudgeConfig(
+    #             name="judge-2",
+    #             type="pointwise",
+    #             model="anthropic/" + os.environ.get("ANTHROPIC_AGENT_MODEL"),
+    #             criteria=["Directly answers the question", "No factual errors"],
+    #             threshold=0.7,
+    #         )
+    #     ],
+    #     providers={
+    #         "gemini" : ProviderConfig(
+    #             api_key=os.environ.get("GEMINI_API_KEY"),
+    #             protocol="gemini"
+    #         ),
+    #         "anthropic" : ProviderConfig(
+    #             api_key=os.environ.get("ANTHROPIC_AGENT_API_KEY"),
+    #             protocol="anthropic"
+    #         )
+    #     }
+    # )
     print(vd)
     verdict = await vd.evaluate(
         "helpfulness",

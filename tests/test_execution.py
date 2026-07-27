@@ -10,7 +10,7 @@ from verdikt.execution.modes import Executor
 
 from conftest import FakeLLMClient, label_response, score_response
 
-M1, M2, M3 = "openai/gpt-4.1", "anthropic/claude-sonnet", "kimi/kimi-k3"
+M1, M2, M3 = "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku", "gemini/gemini-2.5-pro"
 SCORES = {M1: 5, M2: 4, M3: 3}  # normalized: 1.0, 0.75, 0.5
 
 

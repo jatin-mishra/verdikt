@@ -5,14 +5,16 @@ Configurable LLM-as-judge library. Plug it into any agent: configure judges (in 
 **Features**
 
 - 9 built-in judge types: `pointwise`, `reference`, `pairwise` (with position-swap), `rubric` (G-Eval style), `classifier`, `rag_faithfulness`, `rag_context_relevance`, `rag_answer_relevance`, `trajectory` (agent runs) — plus custom judges via `@register`.
-- Execution modes per judge: `single` model, `broadcast` to many models (GPT, Claude, Gemini, Kimi, ...) with consensus (`majority_vote`, `average`, `weighted_average`, `unanimous`, `consensus_leader`), or `judge_of_judges` (a meta-judge weighs all verdicts and reasoning).
+- Execution modes per judge: `single` model, `broadcast` to many models (Claude, Gemini, ...) with consensus (`majority_vote`, `average`, `weighted_average`, `unanimous`, `consensus_leader`), or `judge_of_judges` (a meta-judge weighs all verdicts and reasoning).
 - Multi-step pipelines: sequential/parallel steps, early-exit gates (`on_fail: stop`), conditional steps (`run_if`), and automatic `prior_verdicts` passing so later judges see earlier verdicts.
 - Reliability built in: reasoning-before-score prompts, JSON-only outputs, multi-sample voting, retries with backoff, model fallbacks, optional response caching, injection-resistant prompt delimiting, cost/token tracking on every verdict.
+- Every provider call goes through that provider's official SDK (`anthropic`, `google-genai`) — each adapter owns its own SDK request/response types entirely; nothing outside `verdikt/llm/frontier/adapters/` ever sees them.
+- Optional exact request/response console logging (system prompt, messages, params in; text, tokens, cost, latency out) via the `VERDIKT_LOG_LLM_CALLS` flag — see [Debugging LLM calls](#debugging-llm-calls).
 
 ## Install
 
 ```bash
-pip install -e .            # includes native frontier-provider client (httpx)
+pip install -e .            # includes official provider SDKs (anthropic, google-genai)
 pip install -e ".[dev]"     # + pytest
 ```
 
@@ -24,10 +26,9 @@ from verdikt import Verdikt, JudgeConfig, EvalInput
 
 v = Verdikt(judges=[
     JudgeConfig(name="helpfulness", type="pointwise",
-                model="openai/gpt-4.1-mini", threshold=0.7),
+                model="anthropic/claude-haiku", threshold=0.7),
 ])
-# API keys come from env vars: OPENAI_API_KEY, ANTHROPIC_API_KEY,
-# GEMINI_API_KEY, MOONSHOT_API_KEY (Kimi), ...
+# API keys come from env vars: ANTHROPIC_AGENT_API_KEY, GEMINI_API_KEY
 
 async def main():
     verdict = await v.evaluate("helpfulness", EvalInput(
@@ -46,17 +47,15 @@ A complete reference config covering every judge type, execution mode, and pipel
 ```yaml
 # verdikt.yaml
 providers:
-  openai:    {api_key: ${OPENAI_API_KEY}}
-  anthropic: {api_key: ${ANTHROPIC_API_KEY}}
+  anthropic: {api_key: ${ANTHROPIC_AGENT_API_KEY}}
   gemini:    {api_key: ${GEMINI_API_KEY}}
-  kimi:      {api_key: ${MOONSHOT_API_KEY}, base_url: "https://api.moonshot.ai/v1"}
 
 cache_path: .verdikt_cache.json        # optional: never pay twice for the same call
 
 judges:
   - name: safety
     type: classifier
-    model: openai/gpt-4.1-mini
+    model: anthropic/claude-haiku
     labels: [safe, unsafe]
     fail_on: [unsafe]
 
@@ -68,7 +67,7 @@ judges:
     threshold: 0.7
     execution:
       mode: judge_of_judges
-      models: [openai/gpt-4.1, anthropic/claude-sonnet, kimi/kimi-k3]
+      models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet, gemini/gemini-2.5-pro]
       meta_judge: anthropic/claude-sonnet
 
 pipelines:
@@ -104,7 +103,7 @@ All judges accept the same `EvalInput` and return the same `Verdict`. Each examp
 ```yaml
 - name: helpfulness
   type: pointwise
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
   criteria: ["Directly answers the question", "No factual errors"]  # optional
   scale: {min: 1, max: 5}
   threshold: 0.7          # verdict.passed = score >= 0.7
@@ -140,7 +139,7 @@ v = await vd.evaluate("correctness", EvalInput(
 ```yaml
 - name: ab_test
   type: pairwise
-  model: openai/gpt-4.1
+  model: anthropic/claude-sonnet-4-5
   criteria: ["More helpful", "More accurate"]
   position_swap: true     # default: runs both orders, disagreement -> tie
 ```
@@ -180,7 +179,7 @@ for c in v.criteria_breakdown:            # per-criterion detail
 ```yaml
 - name: safety
   type: classifier
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
   labels: [safe, needs_review, unsafe]
   fail_on: [unsafe]        # verdict.passed = label not in fail_on
 ```
@@ -196,14 +195,14 @@ v.passed   # True
 ```yaml
 - name: grounded          # is every claim supported by the context?
   type: rag_faithfulness
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
   threshold: 0.8
 - name: ctx_relevance     # was the retrieved context relevant to the question?
   type: rag_context_relevance
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
 - name: ans_relevance     # does the answer address the question?
   type: rag_answer_relevance
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
 ```
 
 ```python
@@ -250,7 +249,7 @@ from verdikt.core.base import ScoreParsingMixin
 class ToneJudge(ScoreParsingMixin, BaseJudge):
     template = "pointwise.j2"                      # reuse a built-in template
     allowed_consensus = ("average", "majority_vote")  # optional: own compatibility rules
-# then in YAML: {name: tone_check, type: tone, model: openai/gpt-4.1-mini}
+# then in YAML: {name: tone_check, type: tone, model: anthropic/claude-haiku}
 ```
 
 ## Cookbook — every execution mode
@@ -262,7 +261,7 @@ Execution modes apply to **any** judge type (subject to the compatibility matrix
 ```yaml
 - name: quick_check
   type: pointwise
-  model: openai/gpt-4.1-mini      # execution block omitted -> single
+  model: anthropic/claude-haiku      # execution block omitted -> single
 ```
 
 ### `broadcast` + `average` — mean score across models
@@ -272,7 +271,7 @@ Execution modes apply to **any** judge type (subject to the compatibility matrix
   type: pointwise
   execution:
     mode: broadcast
-    models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5, kimi/kimi-k3]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
     consensus: average             # default for score judges
 ```
 
@@ -288,9 +287,9 @@ v.sub_verdicts           # each model's individual verdict + reasoning
 ```yaml
   execution:
     mode: broadcast
-    models: [openai/gpt-4.1, kimi/kimi-k3]
+    models: [anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
     consensus: weighted_average
-    weights: {"openai/gpt-4.1": 3.0, "kimi/kimi-k3": 1.0}
+    weights: {"anthropic/claude-sonnet-4-5": 3.0, "gemini/gemini-2.5-pro": 1.0}
 ```
 
 ### `broadcast` + `majority_vote` — label/comparison judges
@@ -302,7 +301,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   fail_on: [unsafe]
   execution:
     mode: broadcast
-    models: [openai/gpt-4.1-mini, anthropic/claude-haiku, gemini/gemini-2.5-flash]
+    models: [anthropic/claude-haiku, anthropic/claude-haiku, gemini/gemini-2.5-flash]
     # consensus omitted -> majority_vote (the default for classifier/pairwise)
 ```
 
@@ -315,7 +314,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   fail_on: [unsafe]
   execution:
     mode: broadcast
-    models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5]
     consensus: unanimous          # any split verdict -> passed = false
 ```
 
@@ -324,7 +323,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
 ```yaml
   execution:
     mode: broadcast
-    models: [anthropic/claude-sonnet-4-5, openai/gpt-4.1-mini, kimi/kimi-k3]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-haiku, gemini/gemini-2.5-pro]
     consensus: consensus_leader
     leader: anthropic/claude-sonnet-4-5   # defaults to first model if omitted
     on_disagreement: accept_leader        # or: fail | escalate | accept_consensus
@@ -342,7 +341,7 @@ v.sub_verdicts           # each model's individual verdict + reasoning
   threshold: 0.7
   execution:
     mode: judge_of_judges
-    models: [openai/gpt-4.1, anthropic/claude-sonnet-4-5, kimi/kimi-k3]
+    models: [anthropic/claude-sonnet-4-5, anthropic/claude-sonnet-4-5, gemini/gemini-2.5-pro]
     meta_judge: anthropic/claude-sonnet-4-5
 ```
 
@@ -359,7 +358,7 @@ Better than voting when models disagree *for different reasons* — the meta-jud
 ```yaml
 - name: stable_score
   type: pointwise
-  model: openai/gpt-4.1-mini
+  model: anthropic/claude-haiku
   samples: 5        # 5 runs per model; median score / majority label
 ```
 
@@ -562,8 +561,24 @@ Any backend works — implement `LLMClient.complete()` and pass it as `client=` 
 
 Every judge returns a `Verdict`: `score` (0–1), `label`, `passed`, `reasoning` (always present), `criteria_breakdown`, `confidence`, `sub_verdicts` (broadcast members), `error` (failures never raise mid-pipeline), and `meta` (model(s), tokens, cost, latency, disagreement score, execution mode).
 
+## Debugging LLM calls
+
+`FrontierClient` prints the exact request going out (system prompt, every message, temperature/max_tokens/json_mode) and the exact response coming back (text, tokens, cost, latency) to the console, in bordered/colored blocks. It's on by default for now:
+
+```bash
+export VERDIKT_LOG_LLM_CALLS=0   # turn it off
+```
+
+```python
+from verdikt.llm.logging import set_llm_logging
+
+set_llm_logging(False)   # or True — overrides the env var for this process
+```
+
+`Verdikt(...)` also accepts `client=FrontierClient(log_calls=False)` to control it per client instance.
+
 ## Tests
 
 ```bash
-python -m pytest tests -q   # 58 tests, no network or API keys needed
+python -m pytest tests -q   # 57 tests, no network or API keys needed
 ```
