@@ -3,17 +3,16 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import FakeLLMClient, label_response, score_response, winner_response
 
-from verdikt import EvalInput, JudgeConfig, Message, Step
+from verdikt import BaseJudge, EvalInput, JudgeConfig, Message, Step
 from verdikt.core.registry import available_types, get_judge_class
 from verdikt.execution.modes import Executor
-
-from conftest import FakeLLMClient, label_response, score_response, winner_response
 
 MODEL = "anthropic/claude-haiku"
 
 
-def make(judge_type: str, **kw) -> "tuple":
+def make(judge_type: str, **kw) -> tuple:
     cfg = JudgeConfig(name=f"{judge_type}_j", type=judge_type, model=MODEL, **kw)
     return get_judge_class(judge_type)(cfg)
 
@@ -175,6 +174,45 @@ async def test_system_prompt_and_conversation_rendered_into_prompt():
     assert "You are a terse geography assistant." in prompt
     assert "What is the capital of France?" in prompt
     assert "Let me check that." in prompt
+
+
+async def test_judge_prompt_splits_config_level_vs_input_level_content():
+    """criteria/scale (JudgeConfig-derived, identical every call) render into
+    the system message; input/output (EvalInput-derived, per-call) render
+    into the user message -- see core/base.py's _SYSTEM_KEYS partition."""
+    question = "capital of France?"
+    judge = make("pointwise", criteria=["Be concise"])
+    client = FakeLLMClient(responses=[score_response(4)])
+    await judge.evaluate_with_model(EvalInput(input=question, output="Paris."), client, MODEL)
+    messages = client.messages_seen[0]
+    assert [m["role"] for m in messages] == ["system", "user"]
+    system, user = messages[0]["content"], messages[1]["content"]
+    assert "Be concise" in system  # criteria: config-level
+    assert question not in system and "Paris." not in system
+    assert question in user and "Paris." in user  # input/output: per-call
+
+
+async def test_llm_params_forwarded_to_client():
+    judge = make("pointwise", llm_params={"top_p": 0.9, "stop_sequences": ["END"]})
+    client = FakeLLMClient(responses=[score_response(4)])
+    await judge.evaluate_with_model(EvalInput(output="a"), client, MODEL)
+    kw = client.kwargs_seen[0]
+    assert kw["top_p"] == 0.9
+    assert kw["stop_sequences"] == ["END"]
+    assert kw["temperature"] == judge.config.temperature  # still set alongside llm_params
+
+
+async def test_custom_judge_can_opt_out_of_system_user_split():
+    from verdikt.core.base import ScoreParsingMixin
+
+    class SingleMessageJudge(ScoreParsingMixin, BaseJudge):
+        system_template = None
+        user_template = "pointwise_user.j2"  # reuse a built-in for this test
+
+    judge = SingleMessageJudge(JudgeConfig(name="single", type="pointwise", model=MODEL))
+    client = FakeLLMClient(responses=[score_response(4)])
+    await judge.evaluate_with_model(EvalInput(output="a"), client, MODEL)
+    assert [m["role"] for m in client.messages_seen[0]] == ["user"]
 
 
 async def test_executor_wraps_errors_as_verdict():

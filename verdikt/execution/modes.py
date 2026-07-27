@@ -99,7 +99,7 @@ class Executor:
             return_exceptions=True,
         )
         members: list[Verdict] = []
-        for model, r in zip(models, results):
+        for model, r in zip(models, results, strict=True):
             if isinstance(r, BaseException):
                 members.append(
                     Verdict(judge_name=self.judge.name, error=str(r), meta=JudgeMeta(model=model))
@@ -164,18 +164,24 @@ class Executor:
             f"type={self.judge.config.type}; "
             f"criteria={self.judge.config.criteria or 'overall quality'}"
         )
-        prompt = render(
-            "meta_judge.j2",
-            task_description=task,
-            input=inp.input,
-            output=inp.output,
-            sub_verdicts=ok_members,
-        )
+        # same split as BaseJudge.build_messages(): task_description is
+        # JudgeConfig-derived and identical on every call to this judge, so it
+        # goes in `system` (cacheable); input/output/sub_verdicts vary per call.
+        messages = [
+            {"role": "system", "content": render("meta_judge_system.j2", task_description=task)},
+            {
+                "role": "user",
+                "content": render(
+                    "meta_judge_user.j2", input=inp.input, output=inp.output, sub_verdicts=ok_members
+                ),
+            },
+        ]
         resp = await self.client.complete(
             model,
-            [{"role": "user", "content": prompt}],
+            messages,
             temperature=self.judge.config.temperature,
             max_tokens=self.judge.config.max_tokens,
+            **self.judge.config.llm_params,
         )
         data: dict[str, Any] = extract_json(resp.text)
         verdict = Verdict(

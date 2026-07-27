@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 from .config.loader import VerdiktConfig, load_config
 from .core.registry import get_judge_class
@@ -33,9 +33,9 @@ class Verdikt:
         self,
         judges: Sequence[JudgeConfig] = (),
         pipelines: Sequence[PipelineConfig] = (),
-        providers: Optional[dict[str, ProviderConfig]] = None,
-        client: Optional[LLMClient] = None,
-        cache_path: Optional[str] = None,
+        providers: dict[str, ProviderConfig] | None = None,
+        client: LLMClient | None = None,
+        cache_path: str | None = None,
         max_retries: int = 3,
     ):
         self.registry = ProviderRegistry(dict(providers or {}))
@@ -77,11 +77,11 @@ class Verdikt:
         return FrontierClient(self.registry)
 
     @classmethod
-    def from_yaml(cls, path: str, client: Optional[LLMClient] = None) -> "Verdikt":
+    def from_yaml(cls, path: str, client: LLMClient | None = None) -> Verdikt:
         return cls.from_config(load_config(path), client=client)
 
     @classmethod
-    def from_config(cls, cfg: VerdiktConfig, client: Optional[LLMClient] = None) -> "Verdikt":
+    def from_config(cls, cfg: VerdiktConfig, client: LLMClient | None = None) -> Verdikt:
         return cls(
             judges=cfg.judges,
             pipelines=cfg.pipelines,
@@ -93,7 +93,7 @@ class Verdikt:
 
     # ------------------------------------------------------------------
 
-    async def evaluate(self, name: str, inp: EvalInput) -> Union[Verdict, PipelineVerdict]:
+    async def evaluate(self, name: str, inp: EvalInput) -> Verdict | PipelineVerdict:
         """Run a judge or a pipeline by name."""
         if name in self.pipelines:
             return await self.pipelines[name].run(inp)
@@ -104,7 +104,7 @@ class Verdikt:
             f"judges={sorted(self.executors)}, pipelines={sorted(self.pipelines)}"
         )
 
-    def evaluate_sync(self, name: str, inp: EvalInput) -> Union[Verdict, PipelineVerdict]:
+    def evaluate_sync(self, name: str, inp: EvalInput) -> Verdict | PipelineVerdict:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -119,7 +119,7 @@ class Verdikt:
         """Evaluate a dataset with bounded concurrency; failures become error
         verdicts in the results, never exceptions."""
 
-        async def _fn(inp: EvalInput) -> Union[Verdict, PipelineVerdict]:
+        async def _fn(inp: EvalInput) -> Verdict | PipelineVerdict:
             return await self.evaluate(name, inp)
 
         return await BatchRunner(_fn, concurrency=concurrency).run(items)

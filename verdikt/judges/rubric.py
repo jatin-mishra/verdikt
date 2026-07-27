@@ -11,7 +11,8 @@ from ..core.schemas import CriterionResult, EvalInput, Verdict
 class RubricJudge(BaseJudge):
     """G-Eval style: grade each criterion with chain-of-thought, then average."""
 
-    template = "rubric.j2"
+    system_template = "rubric_system.j2"
+    user_template = "rubric_user.j2"
     verdict_type = "rubric"
 
     def validate_input(self, inp: EvalInput) -> None:

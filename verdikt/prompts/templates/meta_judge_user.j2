@@ -1,0 +1,11 @@
+{% import "_macros.j2" as m %}
+{% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
+{{ m.untrusted("ai_response", output) }}
+{{ m.security_note() }}
+
+Judge verdicts:
+{% for v in sub_verdicts %}
+--- Judge {{ loop.index }} (model: {{ v.meta.model }}) ---
+score: {{ v.score }}, label: {{ v.label }}, confidence: {{ v.confidence }}
+reasoning: {{ v.reasoning }}
+{% endfor %}

@@ -5,7 +5,6 @@ own ``.j2`` file in a directory registered with ``add_template_dir``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
@@ -19,7 +18,7 @@ _env = Environment(
 )
 
 
-def add_template_dir(path: Union[str, Path]) -> None:
+def add_template_dir(path: str | Path) -> None:
     """Register a directory of custom ``.j2`` templates, searched before the
     built-ins. A custom judge can then set ``template = "my_judge.j2"`` and
     resolve it from here -- no need to fork/edit the installed package.

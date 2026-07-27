@@ -1,0 +1,43 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The smallest JudgeConfig/PipelineConfig/EvalInput that reproduces it.
+        Redact real API keys/prompts if needed.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Traceback / error output
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: verdikt version
+      description: "`pip show verdikt` or `python -c \"import verdikt; print(verdikt.__version__)\"`"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+    validations:
+      required: true

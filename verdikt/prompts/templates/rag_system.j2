@@ -1,4 +1,3 @@
-{% import "_macros.j2" as m %}
 You are an impartial evaluator for retrieval-augmented generation (RAG).
 
 {% if metric == "faithfulness" %}
@@ -11,14 +10,6 @@ user input? Penalize irrelevant or noisy context.
 Task: judge ANSWER RELEVANCE — how directly does the AI response answer the
 user input? Penalize off-topic or evasive answers.
 {% endif %}
-
-{{ m.system_prompt(system_prompt) }}
-{{ m.conversation(conversation) }}
-{% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
-{{ m.untrusted("context", (context or []) | join("\n---\n")) }}
-{{ m.untrusted("ai_response", output) }}
-{{ m.security_note() }}
-{{ m.prior_verdicts(priors) }}
 
 Think step by step, THEN score from {{ scale.min }} (worst) to {{ scale.max }} (best).
 

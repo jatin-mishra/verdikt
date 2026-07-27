@@ -9,6 +9,32 @@ description = "Configurable LLM-as-judge library: pluggable judges, multi-model 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Jatin Mishra", email = "jatinm1shra10cr@gmail.com" }]
+keywords = [
+    "llm",
+    "llm-as-judge",
+    "evaluation",
+    "eval",
+    "rag",
+    "agents",
+    "anthropic",
+    "gemini",
+    "ai",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
 dependencies = [
     "pydantic>=2.5",
     "jinja2>=3.1",
@@ -18,11 +44,28 @@ dependencies = [
     "google-genai>=1.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/jatin-mishra/verdikt"
+Repository = "https://github.com/jatin-mishra/verdikt"
+Issues = "https://github.com/jatin-mishra/verdikt/issues"
+Changelog = "https://github.com/jatin-mishra/verdikt/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6", "build>=1.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["verdikt"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # line length is a soft target, not a hard failure
+
+[tool.ruff.lint.isort]
+known-first-party = ["verdikt"]

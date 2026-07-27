@@ -1,0 +1,9 @@
+{% import "_macros.j2" as m %}
+{{ m.system_prompt(system_prompt) }}
+{{ m.conversation(conversation) }}
+{% if input %}{{ m.untrusted("user_input", input) }}{% endif %}
+{% if expected_output %}{{ m.untrusted("reference_answer", expected_output) }}{% endif %}
+{% if context %}{{ m.untrusted("context", context | join("\n---\n")) }}{% endif %}
+{{ m.untrusted("ai_response", output) }}
+{{ m.security_note() }}
+{{ m.prior_verdicts(priors) }}

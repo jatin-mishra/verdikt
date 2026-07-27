@@ -65,6 +65,44 @@ async def test_anthropic_protocol():
     await client.aclose()
 
 
+async def test_anthropic_cache_system_prompt_flag_wraps_system_block():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 1, "output_tokens": 1}},
+        )
+
+    client, seen = make_client(handler)
+    await client.complete("anthropic/claude-sonnet-4-5", MESSAGES, cache_system_prompt=True)
+    body = json.loads(seen[0].content)
+    # cache_system_prompt is a verdikt-level convenience flag, not sent as-is
+    assert "cache_system_prompt" not in body
+    assert body["system"] == [{"type": "text", "text": "be strict", "cache_control": {"type": "ephemeral"}}]
+    await client.aclose()
+
+
+async def test_gemini_ignores_anthropic_only_cache_flag():
+    """A judge broadcasting the same llm_params to both providers shouldn't
+    crash on Gemini just because cache_system_prompt only means something to
+    Anthropic's adapter."""
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+                "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1},
+            },
+        )
+
+    client, seen = make_client(handler)
+    resp = await client.complete("gemini/gemini-2.5-pro", MESSAGES, cache_system_prompt=True)
+    body = json.loads(seen[0].content)
+    assert "cacheSystemPrompt" not in body and "cache_system_prompt" not in body
+    assert resp.text == "ok"
+    await client.aclose()
+
+
 async def test_gemini_protocol():
     def handler(request):
         return httpx.Response(

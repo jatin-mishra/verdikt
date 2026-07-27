@@ -1,0 +1,52 @@
+name: Publish to PyPI
+
+# Triggered by publishing a GitHub Release (tag it vX.Y.Z first, matching
+# the version in pyproject.toml, then draft+publish a Release from that tag).
+# See CONTRIBUTING.md "Releasing" for the one-time PyPI Trusted Publisher
+# setup this workflow depends on -- no PYPI_API_TOKEN secret is used.
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: build sdist/wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build backend
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/verdikt/
+    permissions:
+      id-token: write  # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

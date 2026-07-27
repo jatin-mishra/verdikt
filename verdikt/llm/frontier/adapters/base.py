@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import abc
 import inspect
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -46,6 +46,6 @@ class ProtocolAdapter(abc.ABC):
         params: dict[str, Any],
         *,
         timeout: float,
-        transport: Optional[httpx.AsyncBaseTransport] = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> tuple[str, int, int]:
         """-> (text, input_tokens, output_tokens)"""

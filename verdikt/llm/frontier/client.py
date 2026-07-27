@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -19,10 +19,10 @@ class FrontierClient(LLMClient):
 
     def __init__(
         self,
-        registry: Optional[ProviderRegistry] = None,
+        registry: ProviderRegistry | None = None,
         timeout: float = 120.0,
-        transport: Optional[httpx.AsyncBaseTransport] = None,  # injectable for tests
-        log_calls: Optional[bool] = None,  # None -> defer to the global flag
+        transport: httpx.AsyncBaseTransport | None = None,  # injectable for tests
+        log_calls: bool | None = None,  # None -> defer to the global flag
     ):
         self.registry = registry or ProviderRegistry()
         self.timeout = timeout

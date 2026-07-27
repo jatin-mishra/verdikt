@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import FakeLLMClient, contains, label_response, score_response
 
 from verdikt import EvalInput, JudgeConfig
 from verdikt.core.registry import get_judge_class
 from verdikt.execution.modes import Executor
-
-from conftest import FakeLLMClient, label_response, score_response
 
 M1, M2, M3 = "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku", "gemini/gemini-2.5-pro"
 SCORES = {M1: 5, M2: 4, M3: 3}  # normalized: 1.0, 0.75, 0.5
@@ -122,9 +121,12 @@ async def test_disagreement_fail_action():
 
 async def test_judge_of_judges_meta_call():
     def handler(model, messages):
-        prompt = messages[-1]["content"]
-        if "meta-judge" in prompt:
-            assert "Judge 1" in prompt and "Judge 2" in prompt
+        if contains(messages, "meta-judge"):
+            # task_description is system-level (JudgeConfig-derived, cacheable);
+            # the actual member verdicts are user-level (per-call)
+            assert contains(messages, "type=pointwise")
+            user_content = messages[-1]["content"]
+            assert "Judge 1" in user_content and "Judge 2" in user_content
             return json.dumps(
                 {"reasoning": "judge 2 argued better", "score": 0.42, "label": None, "confidence": 0.9}
             )

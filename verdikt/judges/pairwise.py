@@ -19,7 +19,8 @@ class PairwiseJudge(BaseJudge):
     label: "A" | "B" | "tie"; score: 1.0 (A) / 0.0 (B) / 0.5 (tie).
     """
 
-    template = "pairwise.j2"
+    system_template = "pairwise_system.j2"
+    user_template = "pairwise_user.j2"
     verdict_type = "comparison"
 
     # averaging A/B/tie outcomes produces meaningless mid-values (e.g. 0.67):

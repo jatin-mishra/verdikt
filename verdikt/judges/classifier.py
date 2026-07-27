@@ -11,7 +11,8 @@ from ..core.schemas import EvalInput, Verdict
 class ClassifierJudge(BaseJudge):
     """Returns one label from a fixed set (e.g. safe/unsafe)."""
 
-    template = "classifier.j2"
+    system_template = "classifier_system.j2"
+    user_template = "classifier_user.j2"
     verdict_type = "label"
 
     # labels cannot be averaged: only vote-style consensus makes sense
@@ -27,7 +28,7 @@ class ClassifierJudge(BaseJudge):
         label = str(data.get("label", "")).strip()
         if label not in self.config.labels:
             # tolerate case mismatch before failing
-            lowered = {l.lower(): l for l in self.config.labels}
+            lowered = {allowed.lower(): allowed for allowed in self.config.labels}
             if label.lower() in lowered:
                 label = lowered[label.lower()]
             else:

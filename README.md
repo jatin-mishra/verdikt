@@ -1,5 +1,10 @@
 # verdikt
 
+[![CI](https://github.com/jatin-mishra/verdikt/actions/workflows/ci.yml/badge.svg)](https://github.com/jatin-mishra/verdikt/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/verdikt.svg)](https://pypi.org/project/verdikt/)
+[![Python versions](https://img.shields.io/pypi/pyversions/verdikt.svg)](https://pypi.org/project/verdikt/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Configurable LLM-as-judge library for Python.** Plug it into any agent or
 pipeline: configure judges in code or YAML, feed in the AI's input/output,
 get back a structured, typed `Verdict` — score, label, reasoning, cost, and
@@ -15,6 +20,7 @@ your own components plug in without forking or patching the library. See
 ## Contents
 
 - [Features](#features)
+- [How it compares](#how-it-compares)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Core concepts](#core-concepts)
@@ -26,6 +32,8 @@ your own components plug in without forking or patching the library. See
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Debugging LLM calls](#debugging-llm-calls)
 - [Tests](#tests)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -50,6 +58,42 @@ your own components plug in without forking or patching the library. See
 - **Exact request/response logging** — see the system prompt, every message,
   and the exact reply, tokens, cost and latency for every call, gated behind
   one flag. See [Debugging LLM calls](#debugging-llm-calls).
+
+## How it compares
+
+There's no shortage of LLM-evaluation tooling; verdikt's niche is narrow and
+specific: a small, embeddable Python library — not a service, not a
+framework you build your whole app around — whose distinct feature is
+**panel-style judging**: broadcast to several models, combine them with a
+real consensus strategy (`average`, `weighted_average`, `majority_vote`,
+`unanimous`, `consensus_leader`), or hand the disagreement to a meta-judge
+(`judge_of_judges`) that reads *why* each model scored the way it did, not
+just the number. That, plus gated multi-step pipelines, is what the other
+projects below generally don't do.
+
+|  | **verdikt** | [DeepEval](https://github.com/confident-ai/deepeval) | [Ragas](https://github.com/explodinggradients/ragas) | [Langfuse](https://github.com/langfuse/langfuse) | [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai) | [OpenEvals](https://github.com/langchain-ai/openevals) |
+|---|---|---|---|---|---|---|
+| What it is | Embeddable Python library | Pytest-style Python/TS eval framework | Python RAG-evaluation framework | Self-hosted/cloud LLM engineering platform | Python framework for model evals (AI-safety oriented, UK AISI) | Small library of prebuilt LangChain evaluator functions |
+| Runs as | Import & call — no server | Import & call (+ optional hosted dashboard) | Import & call | A running service (Postgres + ClickHouse + web app) — self-host or cloud | Import & call (+ optional web UI) | Import & call |
+| Multi-model broadcast + consensus voting | ✅ 5 strategies built in | ❌ | ❌ | ❌ | Partial — write your own scorer | ❌ |
+| Meta-judge ("judge of judges") | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Multi-step pipelines with gating/`run_if` | ✅ | ❌ (independent test cases) | ❌ | Via tracing + external orchestration | ✅ (task/solver chains) | ❌ |
+| RAG-specific metrics | 3 built in | Extensive | ✅✅ core focus | Via integrations | Via custom scorers | Via prebuilt evaluators |
+| Agent/trajectory evaluation | ✅ built-in judge type | ✅ | ❌ | Via tracing | ✅✅ core strength — 200+ evals | Via sibling `agentevals` package |
+| LLM providers | Official SDKs (Anthropic, Gemini), extensible via `register_protocol` | Any, via LiteLLM/custom | Any, via LangChain LLM wrappers | Any — model-agnostic observability layer | OpenAI, Anthropic, Google, Groq, Mistral, xAI, Bedrock, Azure, local, ... | Any, via LangChain chat models |
+| Config | Python or YAML | Python (pytest-style) | Python | Web UI + SDK | Python (`@task` decorators) | Python |
+| License | MIT | Apache-2.0 | Apache-2.0 | MIT core (+ commercial enterprise add-ons) | MIT | MIT |
+
+Read the row you care about, not the whole table: reaching for deep RAG
+metrics specifically → Ragas is more mature there; broad agentic/safety
+benchmarking → Inspect AI has far more built-in evals; you already run
+Langfuse for tracing → its evals integrate with what you have. verdikt is
+the pick when you want panel-of-judges consensus and gated pipelines as
+first-class, typed Python, with nothing else to run.
+
+*Comparison verified against each project's own docs/repo as of this
+writing; these projects move fast, so if something's stale,
+[open an issue](https://github.com/jatin-mishra/verdikt/issues).*
 
 ## Install
 
@@ -88,7 +132,7 @@ A fuller runnable version is at [`examples/quickstart.py`](examples/quickstart.p
 |---|---|
 | `EvalInput` | What gets judged: `output` (required), plus optional `input`, `expected_output`, `context`, `conversation`, `trajectory`, `candidates` — each judge type validates the fields it needs. |
 | `Verdict` | What comes back: `score` (0–1), `label`, `passed`, `reasoning`, `criteria_breakdown`, `confidence`, `sub_verdicts` (broadcast members), `error`, and `meta` (model, tokens, cost, latency, disagreement). |
-| `JudgeConfig` | One judge's configuration: `type`, `model`, `criteria`/`labels`/`rubric`, `threshold`, `samples`, and an `execution` block for broadcast/judge-of-judges. |
+| `JudgeConfig` | One judge's configuration: `type`, `model`, `criteria`/`labels`/`rubric`, `threshold`, `samples`, `llm_params` (provider-native passthrough — see [§4](#4-provider-native-params-the-systemuser-split-and-prompt-caching)), and an `execution` block for broadcast/judge-of-judges. |
 | `PipelineConfig` | An ordered/parallel sequence of judges with gating (`on_fail`), conditions (`run_if`), and an aggregation strategy. |
 | `Verdikt` | The facade: builds judges/pipelines from config, owns the `LLMClient`, and exposes `evaluate` / `evaluate_sync` / `evaluate_batch`. |
 
@@ -585,6 +629,7 @@ verdikt's own source.
 | Point at an LLM backend verdikt doesn't wire up (an internal gateway, a local model server, a mocked test double) | `LLMClient` subclass | pass as `client=` |
 | Add a wire protocol / provider SDK verdikt doesn't ship | `ProtocolAdapter` subclass | `register_protocol(...)` |
 | Ship a reusable prompt template with your judge | a `.j2` file | `add_template_dir(...)` |
+| Set `top_p`/`stop_sequences`/thinking budgets/caching/whatever a provider adds next | nothing — it's data | `JudgeConfig(llm_params={...})` |
 
 ### 1. Writing a custom judge
 
@@ -605,7 +650,8 @@ add_template_dir(Path(__file__).parent / "templates")
 
 @register("pii_check")
 class PIIJudge(BaseJudge):
-    template = "pii_check.j2"
+    system_template = None  # simple judge: skip the system/user split (see below), one message
+    user_template = "pii_check.j2"
     verdict_type = "label"
 
     # labels can't be averaged: only vote-style consensus makes sense
@@ -644,10 +690,11 @@ v = await vd.evaluate("pii", EvalInput(output=agent_reply))
 ```
 
 Skip the template file entirely for smaller judges: reuse a built-in
-(`template = "pointwise.j2"`) or override per-config with
-`JudgeConfig(prompt_template="...")` — a raw Jinja2 string, no file needed.
-`ScoreParsingMixin` (`from verdikt.core.base import ScoreParsingMixin`) gives
-you `parse()` for free for `{reasoning, score, confidence}`-shaped replies.
+(`user_template = "pointwise_user.j2"`) or override per-config with
+`JudgeConfig(prompt_template="...")` — a raw Jinja2 string, no file needed,
+sent as a single message. `ScoreParsingMixin` (`from verdikt.core.base import
+ScoreParsingMixin`) gives you `parse()` for free for `{reasoning, score,
+confidence}`-shaped replies.
 
 Override `required_fields()` to validate `EvalInput` up front (default:
 `["output"]`), or `template_context()` to add extra variables your template
@@ -706,6 +753,46 @@ same contract every built-in adapter follows. Register before constructing
 `Verdikt`/`FrontierClient` (adapters resolve lazily on first use, so
 importing the module that calls `register_protocol` early is enough).
 
+### 4. Provider-native params, the system/user split, and prompt caching
+
+Every judge's prompt is two messages, not one: `system_template` renders
+whatever comes from `JudgeConfig` (criteria, rubric, labels, scale,
+few_shot) — identical on every call to that judge — and `user_template`
+renders whatever comes from `EvalInput` (input, output, context,
+conversation, trajectory, ...) — different every call. This isn't just
+tidiness: it's what lets `AnthropicAdapter`/`GeminiAdapter` put your judge's
+instructions in the provider's actual `system` field instead of burying
+them inside a "user" message, which both models follow better, and — since
+the system half is byte-identical across repeated calls to the same judge —
+it's exactly the shape prompt caching wants.
+
+Anything beyond `temperature`/`max_tokens` — `top_p`, `top_k`,
+`stop_sequences`, extended-thinking budgets, tool use, safety settings,
+whatever a provider adds next — goes on `JudgeConfig.llm_params` and reaches
+the SDK call as-is. Each `ProtocolAdapter` decides what it understands;
+nothing above it needs to change when a provider ships something new:
+
+```python
+JudgeConfig(
+    name="strict_check", type="pointwise", model="anthropic/claude-sonnet-4-5",
+    llm_params={
+        "top_p": 0.9,
+        "stop_sequences": ["<END>"],
+        "cache_system_prompt": True,  # Anthropic only: mark the system block
+                                       # cacheable (AnthropicAdapter pops this
+                                       # before calling messages.create(); it's
+                                       # a verdikt convenience name, not a raw
+                                       # Anthropic param). GeminiAdapter drops
+                                       # it silently if the same llm_params is
+                                       # reused on a gemini/* broadcast member.
+    },
+)
+```
+
+Writing your own `ProtocolAdapter` (§3 above)? Do the same thing: pop any
+convenience flags you invent out of `params` before spreading the rest into
+your SDK call, exactly like `AnthropicAdapter.complete()` does.
+
 ### A note on consensus strategies
 
 Consensus strategies (`average`, `majority_vote`, ...) are intentionally a
@@ -756,9 +843,17 @@ set_llm_logging(False)   # or True — overrides the env var for this process
 ## Tests
 
 ```bash
-python -m pytest tests -q   # 59 tests, no network or API keys needed
+python -m pytest tests -q   # 65 tests, no network or API keys needed
 ```
+
+## Contributing
+
+Bug reports, feature requests, and PRs are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the test/lint commands PRs
+are expected to pass, and the release process. This project follows the
+[Contributor Covenant](CODE_OF_CONDUCT.md). For security issues, see
+[SECURITY.md](SECURITY.md) rather than opening a public issue.
 
 ## License
 
-MIT — see `pyproject.toml`.
+MIT — see [LICENSE](LICENSE).

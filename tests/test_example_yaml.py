@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import FakeLLMClient, contains, label_response, score_response
+
 from verdikt import EvalInput, Verdikt
 from verdikt.config.loader import load_config
-
-from conftest import FakeLLMClient, label_response, score_response
 
 EXAMPLE = str(Path(__file__).parent.parent / "examples" / "verdikt.example.yaml")
 
@@ -30,7 +30,7 @@ async def test_example_pipeline_runs(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
     def handler(model, messages):
-        if "Allowed labels" in messages[-1]["content"]:
+        if contains(messages, "Allowed labels"):
             return label_response("safe")
         return score_response(5)
 

@@ -9,7 +9,8 @@ class TrajectoryJudge(ScoreParsingMixin, BaseJudge):
     """Evaluates a full agent run: task completion, tool-call correctness,
     plan efficiency, and answer/observation consistency."""
 
-    template = "trajectory.j2"
+    system_template = "trajectory_system.j2"
+    user_template = "trajectory_user.j2"
     verdict_type = "score"
 
     def required_fields(self) -> list[str]:

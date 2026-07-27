@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from conftest import FakeLLMClient, contains, label_response, score_response
 
 from verdikt import EvalInput, Verdikt, parse_config
 from verdikt.config.loader import load_config
-
-from conftest import FakeLLMClient, label_response, score_response
 
 YAML = """
 providers:
@@ -72,7 +71,7 @@ def test_unknown_judge_in_pipeline_rejected():
 
 async def test_facade_judge_and_pipeline(yaml_path):
     def handler(model, messages):
-        if "Allowed labels" in messages[-1]["content"]:
+        if contains(messages, "Allowed labels"):
             return label_response("safe")
         return score_response(4)
 

@@ -59,14 +59,98 @@ Project root: `/home/claude/verdikt`
       `FrontierClient.complete()` as the single choke-point every provider
       call passes through. 57 tests passing.
 
-## Status: COMPLETE (v0.1.0)
+- [x] 20. README rewrite (professional structure, TOC, "Extending verdikt"
+      section) + new public extension points: `register_protocol` (plug in a
+      custom `ProtocolAdapter`, `verdikt/llm/frontier/adapters/__init__.py`)
+      and `add_template_dir` (custom `.j2` template directories,
+      `verdikt/prompts/__init__.py`). Fixed a real gap found while writing
+      this: `EvalInput.system_prompt`/`.conversation` were declared on the
+      schema but never rendered into any judge's prompt — wired both into
+      `BaseJudge.template_context()` + new `system_prompt`/`conversation`
+      macros in `_macros.j2`, applied across all 6 live-response judge
+      templates. `EvalInput.metadata` deliberately left un-rendered (caller
+      bookkeeping only, documented as such). `examples/quickstart.py`
+      rewritten into 41 numbered, independently-runnable `case_*` functions
+      covering every EvalInput/JudgeConfig/ExecutionConfig/PipelineConfig
+      field, every judge type, every consensus/aggregation strategy, every
+      extension point, and 2 production-style multi-feature cases — all 41
+      verified to actually run against real Anthropic/Gemini calls. 60 tests
+      passing.
+
+- [x] 21. Open-source readiness: `LICENSE` (MIT), `CONTRIBUTING.md` (dev
+      setup, release process incl. one-time PyPI Trusted Publisher setup),
+      `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md`,
+      `CHANGELOG.md`. `pyproject.toml` gained authors/keywords/classifiers/
+      urls + a `[tool.ruff]` config; `verdikt/py.typed` added (PEP 561).
+      Verified (not assumed) that hatchling's default wheel build actually
+      includes `prompts/templates/*.j2` and `py.typed` by building the wheel
+      and pip-installing it into a throwaway venv. Ran `ruff check .`,
+      fixed all real findings (ambiguous variable name, missing `zip(...,
+      strict=True)`, stale `Union`/`Optional` typing imports across most of
+      the package — safe given `from __future__ import annotations`
+      everywhere). Added `.github/workflows/ci.yml` (test matrix, py3.10–
+      3.13 + ruff) and `publish.yml` (PyPI publish on GitHub Release, via
+      OIDC Trusted Publishing — no token secret), plus issue/PR templates.
+      README gained a badges row and a researched, sourced "How it
+      compares" table (verdikt vs DeepEval/Ragas/Langfuse/Inspect
+      AI/OpenEvals). Did NOT push to GitHub or publish to PyPI — that's
+      left for the user to trigger deliberately.
+
+- [x] 22. User flagged a real gap: `BaseJudge` only ever forwarded
+      `temperature`/`max_tokens` to `client.complete()` — no per-judge way to
+      set `top_p`/`stop_sequences`/thinking budgets/etc, and every judge's
+      own instructional prompt was jammed into a single "user" message,
+      never using Anthropic's/Gemini's native `system` field even though
+      each adapter already knew how to route one. Fixed both:
+      - `JudgeConfig.llm_params: dict[str, Any]` (`core/schemas.py`) —
+        provider-native passthrough forwarded from `judge_once()` and
+        `_meta_judge()` straight to `client.complete()`; unknown keys reach
+        the SDK call as-is, so a new provider feature never needs a verdikt
+        code change (each `ProtocolAdapter` decides what it understands).
+      - Split every judge's prompt into two templates:
+        `BaseJudge.system_template` (renders JudgeConfig-derived,
+        call-invariant content — criteria/rubric/labels/scale/few_shot) and
+        `user_template` (renders EvalInput-derived, per-call content —
+        input/output/context/conversation/trajectory/priors). Partition is a
+        fixed key set (`_SYSTEM_KEYS` in `core/base.py`), so existing
+        `template_context()` overrides (RAG's `metric`, pairwise's
+        `candidate_a/b`) needed no changes. `build_messages()` replaces the
+        old `build_prompt()`; `system_template = None` opts a judge out of
+        the split (single message, e.g. simple custom judges). Renamed all
+        7 template pairs (`{type}_system.j2`/`{type}_user.j2`,
+        `meta_judge_*.j2` too) — deleted the 7 old combined files.
+      - Bonus this unlocked cheaply: `AnthropicAdapter` now supports a
+        `cache_system_prompt: True` convenience flag in `llm_params` that
+        wraps the system message in Anthropic's `cache_control: ephemeral`
+        block — since that block is now genuinely identical across every
+        call to a given judge, it's a real caching win, not just a shape
+        change. `GeminiAdapter` defensively pops/ignores the same flag so a
+        judge broadcasting shared `llm_params` to both providers doesn't
+        crash on Gemini (no equivalent inline mechanism there — Gemini's
+        context caching is a separate, heavier API, left as a future item).
+      - Fixed 5 test sites across `test_pipeline.py`/`test_config_and_facade.py`/
+        `test_example_yaml.py`/`test_execution.py` that inspected
+        `messages[-1]["content"]` to route fake responses — "Allowed
+        labels"/"meta-judge" moved to the now-separate system message, so
+        these now scan the whole conversation (`conftest.py`'s new
+        `contains()` helper). Verified end-to-end against the real Anthropic
+        API (system/user split visible in the debug log, `cache_control`
+        accepted, `stop_sequences` honored) and confirmed Gemini doesn't
+        error on the shared `cache_system_prompt` flag. 65 tests passing.
+
+## Status: COMPLETE (v0.1.0, unpublished)
 
 All planned work is done and delivered. If resuming for follow-up work, run
-`python3 -m pytest tests -q` from /home/claude/verdikt first to confirm state.
+`python3 -m pytest tests -q` first to confirm state.
 
 ## Possible next steps (not requested yet)
 
 - Calibration tooling (`verdikt calibrate` vs a human-labeled set)
 - Escalation execution for on_disagreement=escalate (currently flags meta.extra["needs_escalation"])
 - Sync batch wrapper; streaming progress callbacks
-- PyPI packaging polish (CI, ruff, mypy)
+- mypy in CI (codebase isn't mypy-clean end-to-end yet; deliberately not
+  bundled into the ruff/CI work in #21 — separate effort)
+- Actually push to GitHub + cut the first PyPI release (see CONTRIBUTING.md
+  "Releasing")
+- Gemini context caching (a separate, heavier API than Anthropic's inline
+  cache_control -- requires creating a CachedContent resource ahead of time)

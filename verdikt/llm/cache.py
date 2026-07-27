@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Any, Optional
+from typing import Any
 
 from .client import LLMClient, LLMResponse
 
@@ -18,7 +18,7 @@ def _key(model: str, messages: list[dict[str, str]], kw: dict[str, Any]) -> str:
 
 
 class CachingClient(LLMClient):
-    def __init__(self, inner: LLMClient, path: Optional[str] = None):
+    def __init__(self, inner: LLMClient, path: str | None = None):
         self.inner = inner
         self.path = path
         self._mem: dict[str, dict[str, Any]] = {}

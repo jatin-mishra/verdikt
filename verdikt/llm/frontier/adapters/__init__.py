@@ -1,9 +1,9 @@
 """Registry of frontier wire-protocol adapters and their provider defaults."""
 from __future__ import annotations
 
-from .anthropic import AnthropicAdapter
 from .anthropic import DEFAULT_BASE_URLS as _ANTHROPIC_URLS
 from .anthropic import PROTOCOL as _ANTHROPIC
+from .anthropic import AnthropicAdapter
 from .base import ProtocolAdapter
 from .gemini import DEFAULT_BASE_URLS as _GEMINI_URLS
 from .gemini import PROTOCOL as _GEMINI

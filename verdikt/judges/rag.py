@@ -8,7 +8,8 @@ from ..core.schemas import EvalInput
 
 
 class _RagJudge(ScoreParsingMixin, BaseJudge):
-    template = "rag.j2"
+    system_template = "rag_system.j2"
+    user_template = "rag_user.j2"
     verdict_type = "score"
     metric = "faithfulness"
 

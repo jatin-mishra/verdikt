@@ -15,7 +15,7 @@ _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 def _interpolate(value: Any) -> Any:
     if isinstance(value, str):
-        def sub(m: "re.Match[str]") -> str:
+        def sub(m: re.Match[str]) -> str:
             return os.environ.get(m.group(1), "")
 
         return _ENV_RE.sub(sub, value)

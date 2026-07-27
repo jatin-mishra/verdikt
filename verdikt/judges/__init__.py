@@ -1,5 +1,4 @@
 from . import classifier, pairwise, pointwise, rag, rubric, trajectory  # noqa: F401
-
 from .classifier import ClassifierJudge
 from .pairwise import PairwiseJudge
 from .pointwise import PointwiseJudge, ReferenceJudge

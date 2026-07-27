@@ -4,7 +4,7 @@ from __future__ import annotations
 import abc
 import asyncio
 import random
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -66,7 +66,7 @@ class RetryingClient(LLMClient):
         inner: LLMClient,
         max_retries: int = 3,
         base_delay: float = 1.0,
-        fallbacks: Optional[dict[str, list[str]]] = None,  # model -> fallback models
+        fallbacks: dict[str, list[str]] | None = None,  # model -> fallback models
     ):
         self.inner = inner
         self.max_retries = max_retries

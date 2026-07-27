@@ -10,16 +10,32 @@ import asyncio
 import statistics
 import time
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 
 from ..llm.client import LLMClient, LLMResponse
 from ..prompts import render, render_inline
 from .parsing import extract_json
 from .schemas import EvalInput, JudgeConfig, JudgeMeta, Verdict
 
+# Context keys that come from JudgeConfig (criteria, labels, ...) rather than
+# EvalInput (input, output, ...): identical on every call to a given judge
+# instance, so they render into the *system* message -- eligible for
+# provider-side prompt caching (see AnthropicAdapter's cache_system_prompt).
+# Everything else in template_context() is per-call and renders into *user*.
+_SYSTEM_KEYS = frozenset({"criteria", "rubric", "labels", "scale", "few_shot", "metric"})
+
 
 class BaseJudge(abc.ABC):
-    template: str = "pointwise.j2"
+    # Two templates, not one: system_template renders JudgeConfig-derived,
+    # call-invariant instructions (criteria/labels/rubric/scale/few_shot);
+    # user_template renders the EvalInput-derived, per-call content (input/
+    # output/context/trajectory/...). This lets each provider's adapter use
+    # its native system-prompt slot instead of one big "user" message, and
+    # makes the system half byte-identical across calls -- a prerequisite for
+    # prompt caching. Set system_template = None for a single-message judge
+    # (no split) -- see PIIJudge in README's "Extending verdikt".
+    system_template: str | None = "pointwise_system.j2"
+    user_template: str = "pointwise_user.j2"
     verdict_type: str = "score"
 
     # -- execution-mode compatibility (see verdikt.execution.modes) ----------
@@ -76,11 +92,21 @@ class BaseJudge(abc.ABC):
         if missing:
             raise ValueError(f"judge '{self.name}' requires input fields: {missing}")
 
-    def build_prompt(self, inp: EvalInput, **overrides: Any) -> str:
+    def build_messages(self, inp: EvalInput, **overrides: Any) -> list[dict[str, str]]:
         ctx = {**self.template_context(inp), **overrides}
         if self.config.prompt_template:
-            return render_inline(self.config.prompt_template, **ctx)
-        return render(self.template, **ctx)
+            # a full inline override replaces the whole prompt -- one message,
+            # matching what the override text itself was written to expect.
+            return [{"role": "user", "content": render_inline(self.config.prompt_template, **ctx)}]
+        messages = []
+        if self.system_template:
+            system_ctx = {k: v for k, v in ctx.items() if k in _SYSTEM_KEYS}
+            user_ctx = {k: v for k, v in ctx.items() if k not in _SYSTEM_KEYS}
+            messages.append({"role": "system", "content": render(self.system_template, **system_ctx)})
+        else:
+            user_ctx = ctx  # no split: the single template gets everything
+        messages.append({"role": "user", "content": render(self.user_template, **user_ctx)})
+        return messages
 
     def apply_threshold(self, v: Verdict) -> Verdict:
         if v.error:
@@ -94,12 +120,13 @@ class BaseJudge(abc.ABC):
     async def judge_once(
         self, inp: EvalInput, client: LLMClient, model: str, **prompt_overrides: Any
     ) -> tuple[Verdict, LLMResponse]:
-        prompt = self.build_prompt(inp, **prompt_overrides)
+        messages = self.build_messages(inp, **prompt_overrides)
         resp = await client.complete(
             model,
-            [{"role": "user", "content": prompt}],
+            messages,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
+            **self.config.llm_params,
         )
         data = extract_json(resp.text)
         verdict = self.parse(data, inp)
@@ -180,7 +207,7 @@ class ScoreParsingMixin:
         )
 
 
-def _opt_float(v: Any) -> Optional[float]:
+def _opt_float(v: Any) -> float | None:
     try:
         return None if v is None else float(v)
     except (TypeError, ValueError):

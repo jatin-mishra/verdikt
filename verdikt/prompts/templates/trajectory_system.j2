@@ -13,24 +13,6 @@ necessary, (3) was the plan efficient (no loops or redundant steps), (4) is the
 final answer consistent with the observations gathered.
 {% endif %}
 
-{{ m.system_prompt(system_prompt) }}
-{{ m.conversation(conversation) }}
-{% if input %}{{ m.untrusted("task", input) }}{% endif %}
-<trajectory>
-{% for s in trajectory %}
-Step {{ loop.index }}:
-{% if s.thought %}  thought: {{ s.thought }}
-{% endif %}
-{% if s.tool %}  tool: {{ s.tool }}({{ s.tool_input | tojson }})
-{% endif %}
-{% if s.observation %}  observation: {{ s.observation }}
-{% endif %}
-{% endfor %}
-</trajectory>
-{{ m.untrusted("final_answer", output) }}
-{{ m.security_note() }}
-{{ m.prior_verdicts(priors) }}
-
 Think step by step, THEN score from {{ scale.min }} (worst) to {{ scale.max }} (best).
 
 Respond with ONLY this JSON object:

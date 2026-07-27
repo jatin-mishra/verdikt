@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from conftest import FakeLLMClient, contains, label_response, score_response
 
 from verdikt import EvalInput, JudgeConfig, PipelineConfig, Verdict
 from verdikt.core.registry import get_judge_class
 from verdikt.execution.modes import Executor
 from verdikt.pipeline.runner import PipelineRunner, eval_condition
-
-from conftest import FakeLLMClient, label_response, score_response
 
 MODEL = "anthropic/claude-haiku"
 
@@ -24,8 +23,7 @@ def executors(client) -> dict:
 
 
 def route(model, messages):
-    prompt = messages[-1]["content"]
-    if "Allowed labels" in prompt:
+    if contains(messages, "Allowed labels"):
         return label_response("safe")
     return score_response(4)
 
@@ -47,8 +45,7 @@ async def test_sequential_pipeline_with_prior_verdicts():
 
 async def test_gate_stops_pipeline():
     def handler(model, messages):
-        prompt = messages[-1]["content"]
-        if "Allowed labels" in prompt:
+        if contains(messages, "Allowed labels"):
             return label_response("unsafe")
         return score_response(5)
 

@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an idea — a new judge type, consensus strategy, provider, etc.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that verdikt doesn't support today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: >
+        Sketch the JudgeConfig/EvalInput/Verdikt shape you'd want, if you have
+        one in mind. Doesn't need to be final.
+      render: python
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you've tried
+      description: >
+        E.g. can this already be done via a custom judge (`@register`), a
+        custom `LLMClient`, or `register_protocol`? See README "Extending verdikt".

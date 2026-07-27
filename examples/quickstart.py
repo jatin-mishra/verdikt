@@ -20,8 +20,9 @@ import asyncio
 import os
 import sys
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Union
+from typing import Any
 
 from verdikt import (
     BaseJudge,
@@ -69,7 +70,7 @@ def providers() -> dict[str, ProviderConfig]:
     }
 
 
-def show(result: Union[Verdict, PipelineVerdict], label: str = "RESULT") -> None:
+def show(result: Verdict | PipelineVerdict, label: str = "RESULT") -> None:
     """Pretty-print every field verdikt returns — this one helper is why
     every case below demonstrates the full Verdict/PipelineVerdict shape
     without repeating a dozen print() calls per case."""
@@ -882,7 +883,8 @@ async def case_custom_judge_type_with_template() -> None:
 
     @register("pii_check")
     class PIIJudge(BaseJudge):
-        template = "pii_check.j2"
+        system_template = None  # simple judge: skip the system/user split, one message
+        user_template = "pii_check.j2"
         verdict_type = "label"
         allowed_consensus = ("majority_vote", "unanimous", "consensus_leader")
         default_consensus = "majority_vote"
@@ -1001,6 +1003,31 @@ async def case_production_ci_regression_gate() -> None:
     print(f"\npass_rate={pass_rate:.0%} ({sum(1 for _, v in results if v.passed)}/{len(results)})")
     if pass_rate < 1.0:
         print("would exit(1) in a real CI job — regression detected")
+
+
+@case("llm_params — provider-native passthrough (top_p, stop_sequences, prompt caching)")
+async def case_llm_params_and_prompt_caching() -> None:
+    """JudgeConfig.llm_params reaches the provider SDK call as-is (BaseJudge
+    only ever hard-codes temperature/max_tokens itself) -- new SDK features
+    need no verdikt code change, just pass the param name the SDK expects.
+    cache_system_prompt is the one verdikt-level convenience flag: it marks
+    the (JudgeConfig-derived, byte-identical-per-judge) system message as
+    cacheable on Anthropic; GeminiAdapter silently ignores it if the same
+    llm_params also broadcasts to a gemini/* model (see AnthropicAdapter vs
+    GeminiAdapter .complete() -- README 'How it compares' on why this is
+    adapter-owned rather than a core verdikt concept)."""
+    vd = Verdikt(
+        judges=[
+            JudgeConfig(
+                name="tuned_check", type="pointwise", model=ANTHROPIC_MODEL,
+                criteria=["Directly answers the question"], threshold=0.7,
+                llm_params={"cache_system_prompt": True, "stop_sequences": ["<STOP>"]},
+            )
+        ],
+        providers=providers(),
+    )
+    v = await vd.evaluate("tuned_check", EvalInput(input=QUESTION, output=ANSWER))
+    show(v)  # request log shows params={'cache_system_prompt': True, 'stop_sequences': ['<STOP>']}
 
 
 # ===========================================================================

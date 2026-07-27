@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Optional
 
 from ..core.schemas import ExecutionConfig, Verdict
 
 
-def disagreement_score(verdicts: list[Verdict]) -> Optional[float]:
+def disagreement_score(verdicts: list[Verdict]) -> float | None:
     """0 = all models agree, 1 = maximal disagreement."""
     ok = [v for v in verdicts if v.ok]
     if len(ok) < 2:

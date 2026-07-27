@@ -6,13 +6,13 @@ so one bad item never sinks the batch.
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable, Union
+from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
 from ..core.schemas import EvalInput, PipelineVerdict, Verdict
 
-AnyVerdict = Union[Verdict, PipelineVerdict]
+AnyVerdict = Verdict | PipelineVerdict
 EvalFn = Callable[[EvalInput], Awaitable[AnyVerdict]]
 
 

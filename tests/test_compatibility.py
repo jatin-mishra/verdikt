@@ -4,12 +4,11 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import FakeLLMClient, winner_response
 
 from verdikt import EvalInput, JudgeConfig
 from verdikt.core.registry import get_judge_class
 from verdikt.execution.modes import Executor
-
-from conftest import FakeLLMClient, winner_response
 
 M1, M2, M3 = "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku", "gemini/gemini-2.5-pro"
 

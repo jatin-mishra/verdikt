@@ -6,7 +6,7 @@ output_tokens)`` tuple from ``complete()``.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from google import genai
@@ -25,7 +25,7 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 
 class GeminiAdapter(ProtocolAdapter):
     def _client(
-        self, base_url: str, api_key: str, timeout: float, transport: Optional[httpx.AsyncBaseTransport]
+        self, base_url: str, api_key: str, timeout: float, transport: httpx.AsyncBaseTransport | None
     ) -> genai.Client:
         def factory() -> genai.Client:
             # base_url already carries the API version (".../v1beta"); clear
@@ -52,7 +52,7 @@ class GeminiAdapter(ProtocolAdapter):
         params: dict[str, Any],
         *,
         timeout: float,
-        transport: Optional[httpx.AsyncBaseTransport] = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> tuple[str, int, int]:
         system_parts = [m["content"] for m in messages if m["role"] == "system"]
         contents = [
@@ -60,6 +60,13 @@ class GeminiAdapter(ProtocolAdapter):
             for m in messages
             if m["role"] != "system"
         ]
+        params = dict(params)
+        # verdikt-level convenience flag Anthropic understands (see
+        # AnthropicAdapter.complete) but Gemini has no equivalent inline
+        # mechanism for (its context caching is a separate, heavier API) --
+        # drop it rather than let it crash a judge broadcasting to both
+        # providers with the same llm_params.
+        params.pop("cache_system_prompt", None)
         config = types.GenerateContentConfig(
             temperature=temperature,
             max_output_tokens=max_tokens,

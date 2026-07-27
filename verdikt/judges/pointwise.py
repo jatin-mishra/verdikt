@@ -9,7 +9,7 @@ class PointwiseJudge(ScoreParsingMixin, BaseJudge):
     """Scores one output on the configured scale (reference-free by default;
     uses ``expected_output`` and ``context`` automatically when present)."""
 
-    template = "pointwise.j2"
+    # uses BaseJudge's default system_template/user_template (pointwise_*.j2)
     verdict_type = "score"
 
 

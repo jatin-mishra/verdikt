@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Optional
 
 from ..core.schemas import ProviderConfig
 
@@ -20,7 +19,7 @@ _ENV_KEYS = {
 
 
 class ProviderRegistry:
-    def __init__(self, providers: Optional[dict[str, ProviderConfig]] = None):
+    def __init__(self, providers: dict[str, ProviderConfig] | None = None):
         self.providers: dict[str, ProviderConfig] = providers or {}
         self._semaphores: dict[str, asyncio.Semaphore] = {}
 

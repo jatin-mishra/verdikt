@@ -6,7 +6,7 @@ response types; ``FrontierClient`` only ever sees the generic
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import anthropic
 import httpx
@@ -22,7 +22,7 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 
 class AnthropicAdapter(ProtocolAdapter):
     def _client(
-        self, base_url: str, api_key: str, timeout: float, transport: Optional[httpx.AsyncBaseTransport]
+        self, base_url: str, api_key: str, timeout: float, transport: httpx.AsyncBaseTransport | None
     ) -> anthropic.AsyncAnthropic:
         def factory() -> anthropic.AsyncAnthropic:
             http_client = httpx.AsyncClient(transport=transport) if transport is not None else None
@@ -48,10 +48,15 @@ class AnthropicAdapter(ProtocolAdapter):
         params: dict[str, Any],
         *,
         timeout: float,
-        transport: Optional[httpx.AsyncBaseTransport] = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> tuple[str, int, int]:
         system_parts = [m["content"] for m in messages if m["role"] == "system"]
         chat = [m for m in messages if m["role"] != "system"]
+        params = dict(params)
+        # verdikt-level convenience flag, not a real Anthropic param -- pop it
+        # before spreading params into the SDK call, or messages.create()
+        # would reject it as an unknown keyword.
+        cache_system = params.pop("cache_system_prompt", False)
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": chat,
@@ -60,7 +65,17 @@ class AnthropicAdapter(ProtocolAdapter):
             **params,
         }
         if system_parts:
-            kwargs["system"] = "\n\n".join(system_parts)
+            system_text = "\n\n".join(system_parts)
+            if cache_system:
+                # Anthropic prompt caching: mark the system block cacheable.
+                # Since BaseJudge renders `system` from JudgeConfig-only data,
+                # it's byte-identical across every call to this judge -- an
+                # ideal cache candidate (cheaper + faster on repeat calls).
+                kwargs["system"] = [
+                    {"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}
+                ]
+            else:
+                kwargs["system"] = system_text
         # Anthropic has no JSON response_format; the prompt templates already
         # demand a JSON-only reply and extract_json() handles any wrapping.
         client = self._client(base_url, api_key, timeout, transport)

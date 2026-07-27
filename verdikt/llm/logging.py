@@ -9,23 +9,23 @@ from __future__ import annotations
 import itertools
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .client import LLMResponse
 
 _call_ids = itertools.count(1)
-_override: Optional[bool] = None
+_override: bool | None = None
 
 
-def set_llm_logging(enabled: Optional[bool]) -> None:
+def set_llm_logging(enabled: bool | None) -> None:
     """Force LLM call logging on/off process-wide. Pass ``None`` to fall
     back to the ``VERDIKT_LOG_LLM_CALLS`` env var."""
     global _override
     _override = enabled
 
 
-def is_llm_logging_enabled(explicit: Optional[bool] = None) -> bool:
+def is_llm_logging_enabled(explicit: bool | None = None) -> bool:
     if explicit is not None:
         return explicit
     if _override is not None:
@@ -68,7 +68,7 @@ def log_request(
     json_mode: bool,
     params: dict[str, Any],
     *,
-    enabled: Optional[bool] = None,
+    enabled: bool | None = None,
 ) -> str:
     call_id = f"llm-{next(_call_ids)}"
     if not is_llm_logging_enabled(enabled):
@@ -90,9 +90,9 @@ def log_request(
 def log_response(
     call_id: str,
     model: str,
-    response: "LLMResponse",
+    response: LLMResponse,
     *,
-    enabled: Optional[bool] = None,
+    enabled: bool | None = None,
 ) -> None:
     if not is_llm_logging_enabled(enabled):
         return
@@ -110,7 +110,7 @@ def log_error(
     model: str,
     error: Exception,
     *,
-    enabled: Optional[bool] = None,
+    enabled: bool | None = None,
 ) -> None:
     if not is_llm_logging_enabled(enabled):
         return
